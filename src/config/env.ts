@@ -23,15 +23,24 @@ const envSchema = z.object({
     .default('info'),
 
   // Supabase Auth (for authentication)
+  // Supports both legacy JWT keys (eyJ...) and new API keys (sb_publishable_/sb_secret_)
   SUPABASE_URL: z
     .string()
     .url('SUPABASE_URL must be a valid URL'),
   SUPABASE_ANON_KEY: z
     .string()
-    .min(50, 'SUPABASE_ANON_KEY appears to be invalid (too short)'),
+    .min(1, 'SUPABASE_ANON_KEY is required')
+    .refine(
+      (key) => key.startsWith('eyJ') || key.startsWith('sb_publishable_'),
+      'SUPABASE_ANON_KEY must be a legacy JWT (eyJ...) or new publishable key (sb_publishable_...)'
+    ),
   SUPABASE_SERVICE_KEY: z
     .string()
-    .min(50, 'SUPABASE_SERVICE_KEY appears to be invalid (too short)'),
+    .min(1, 'SUPABASE_SERVICE_KEY is required')
+    .refine(
+      (key) => key.startsWith('eyJ') || key.startsWith('sb_secret_'),
+      'SUPABASE_SERVICE_KEY must be a legacy JWT (eyJ...) or new secret key (sb_secret_...)'
+    ),
 
   // Database (for Drizzle ORM)
   DATABASE_URL: z
