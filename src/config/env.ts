@@ -22,7 +22,7 @@ const envSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
     .default('info'),
 
-  // Supabase
+  // Supabase Auth (for authentication)
   SUPABASE_URL: z
     .string()
     .url('SUPABASE_URL must be a valid URL'),
@@ -32,6 +32,15 @@ const envSchema = z.object({
   SUPABASE_SERVICE_KEY: z
     .string()
     .min(50, 'SUPABASE_SERVICE_KEY appears to be invalid (too short)'),
+
+  // Database (for Drizzle ORM)
+  DATABASE_URL: z
+    .string()
+    .min(1, 'DATABASE_URL is required')
+    .refine(
+      (url) => url.startsWith('postgresql://') || url.startsWith('postgres://'),
+      'DATABASE_URL must be a valid PostgreSQL connection string'
+    ),
 
   // CORS
   CORS_ORIGIN: z

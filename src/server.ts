@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { verifySupabaseConnection } from './lib/supabase.js';
+import { verifyDatabaseConnection, closeDatabaseConnection } from './db/index.js';
 
 /**
  * Start the server.
@@ -9,11 +10,16 @@ import { verifySupabaseConnection } from './lib/supabase.js';
 async function main(): Promise<void> {
   logger.info({ nodeEnv: env.NODE_ENV }, 'Starting Relogate API server');
 
-  // Verify Supabase connection
+  // Verify Supabase Auth connection
   const supabaseOk = await verifySupabaseConnection();
   if (!supabaseOk) {
-    logger.warn('Supabase connection could not be verified. Server will start anyway.');
-    // Don't exit - might be a temporary issue
+    logger.warn('Supabase Auth connection could not be verified. Server will start anyway.');
+  }
+
+  // Verify Database connection (Drizzle)
+  const dbOk = await verifyDatabaseConnection();
+  if (!dbOk) {
+    logger.warn('Database connection could not be verified. Server will start anyway.');
   }
 
   // Create Express app
@@ -48,10 +54,11 @@ async function main(): Promise<void> {
   const gracefulShutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal');
 
-    server.close(() => {
+    server.close(async () => {
       logger.info('HTTP server closed');
 
-      // TODO: Close database connections, flush logs, etc.
+      // Close database connections
+      await closeDatabaseConnection();
 
       process.exit(0);
     });
