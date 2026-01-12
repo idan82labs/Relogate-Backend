@@ -1,10 +1,12 @@
 import express, { type Application, type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { apiRouter } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
+import { sessionLoggerMiddleware } from './middleware/session-logger.js';
 
 /**
  * Create and configure Express application.
@@ -61,6 +63,16 @@ export function createApp(): Application {
 
   // Parse URL-encoded bodies
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+  // Parse cookies
+  app.use(cookieParser());
+
+  // ===========================================
+  // Session Logging (File-based)
+  // ===========================================
+
+  // Session-based file logging for debugging auth flow
+  app.use(sessionLoggerMiddleware);
 
   // ===========================================
   // Logging

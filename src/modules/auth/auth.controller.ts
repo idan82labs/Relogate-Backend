@@ -7,6 +7,7 @@ import type {
 } from './auth.schema.js';
 import { UnauthorizedError } from '../../lib/errors.js';
 import { createModuleLogger } from '../../config/logger.js';
+import { getSessionLogger } from '../../middleware/session-logger.js';
 
 const logger = createModuleLogger('auth-controller');
 
@@ -23,7 +24,22 @@ export const authController = {
     req: Request<object, object, RegisterInput>,
     res: Response
   ): Promise<void> {
+    const sessionLog = getSessionLogger(req);
+    const { email, firstName, lastName } = req.body;
+
+    sessionLog.info('AuthController', 'REGISTER - Request received', {
+      email: email.substring(0, 3) + '***',
+      firstName,
+      lastName,
+    });
+
     const result = await authService.register(req.body);
+
+    sessionLog.info('AuthController', 'REGISTER - User created', {
+      userId: result.user.id,
+      onboardingStatus: result.user.onboardingStatus,
+      hasTokens: !!result.tokens.accessToken,
+    });
 
     // If no tokens, email confirmation is required
     if (!result.tokens.accessToken) {
@@ -50,7 +66,21 @@ export const authController = {
     req: Request<object, object, LoginInput>,
     res: Response
   ): Promise<void> {
+    const sessionLog = getSessionLogger(req);
+    const { email } = req.body;
+
+    sessionLog.info('AuthController', 'LOGIN - Request received', {
+      email: email.substring(0, 3) + '***',
+    });
+
     const result = await authService.login(req.body);
+
+    sessionLog.info('AuthController', 'LOGIN - Success', {
+      userId: result.user.id,
+      onboardingStatus: result.user.onboardingStatus,
+      hasAccessToken: !!result.tokens.accessToken,
+      expiresIn: result.tokens.expiresIn,
+    });
 
     // TODO: Set refresh token in httpOnly cookie for better security
     // res.cookie('refreshToken', result.tokens.refreshToken, {
@@ -112,14 +142,27 @@ export const authController = {
    * Requires authentication middleware.
    */
   async me(req: Request, res: Response): Promise<void> {
+    const sessionLog = getSessionLogger(req);
     const authHeader = req.headers.authorization;
     const token = authHeader?.replace('Bearer ', '');
 
+    sessionLog.info('AuthController', 'GET ME - Request received', {
+      hasToken: !!token,
+      tokenPreview: token ? `${token.substring(0, 20)}...` : null,
+    });
+
     if (!token) {
+      sessionLog.warn('AuthController', 'GET ME - No token provided');
       throw new UnauthorizedError('No token provided');
     }
 
     const user = await authService.getUser(token);
+
+    sessionLog.info('AuthController', 'GET ME - Success', {
+      userId: user.id,
+      onboardingStatus: user.onboardingStatus,
+      emailVerified: user.emailVerified,
+    });
 
     res.status(200).json({
       success: true,
