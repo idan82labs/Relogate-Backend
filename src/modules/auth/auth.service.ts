@@ -1,4 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { supabaseAdmin } from '../../lib/supabase.js';
+import { db } from '../../db/index.js';
+import { userProfiles } from '../../db/schema/index.js';
 import { createModuleLogger } from '../../config/logger.js';
 import {
   UnauthorizedError,
@@ -16,10 +19,51 @@ import type {
   PublicUser,
   SupabaseUser,
   SupabaseSession,
+  OnboardingStatus,
 } from './auth.types.js';
 import { toPublicUser, toAuthTokens } from './auth.types.js';
 
 const logger = createModuleLogger('auth-service');
+
+/**
+ * Helper to get user's onboarding status from database.
+ */
+async function getOnboardingStatus(userId: string): Promise<OnboardingStatus> {
+  try {
+    const [profile] = await db
+      .select({ onboardingStatus: userProfiles.onboardingStatus })
+      .from(userProfiles)
+      .where(eq(userProfiles.id, userId))
+      .limit(1);
+
+    return profile?.onboardingStatus ?? 'pending';
+  } catch (error) {
+    logger.warn({ userId, error }, 'Failed to get onboarding status, defaulting to pending');
+    return 'pending';
+  }
+}
+
+/**
+ * Helper to create user profile in database.
+ */
+async function createUserProfile(
+  userId: string,
+  firstName: string,
+  lastName: string
+): Promise<void> {
+  try {
+    await db.insert(userProfiles).values({
+      id: userId,
+      firstName,
+      lastName,
+      onboardingStatus: 'pending',
+    });
+    logger.info({ userId }, 'User profile created');
+  } catch (error) {
+    // Profile might already exist if created via trigger or previous attempt
+    logger.warn({ userId, error }, 'Failed to create user profile (may already exist)');
+  }
+}
 
 /**
  * Authentication service.
@@ -73,8 +117,10 @@ export const authService = {
       // If no session, user needs to confirm email
       if (data.user && !data.session) {
         const user = data.user as SupabaseUser;
+        // Create user profile in database
+        await createUserProfile(user.id, firstName, lastName);
         return {
-          user: toPublicUser(user),
+          user: toPublicUser(user, 'pending'),
           tokens: {
             accessToken: '',
             refreshToken: '',
@@ -92,8 +138,11 @@ export const authService = {
     const user = data.user as SupabaseUser;
     const session = data.session as SupabaseSession;
 
+    // Create user profile in database
+    await createUserProfile(user.id, firstName, lastName);
+
     return {
-      user: toPublicUser(user),
+      user: toPublicUser(user, 'pending'),
       tokens: toAuthTokens(session),
     };
   },
@@ -134,8 +183,11 @@ export const authService = {
     const user = data.user as SupabaseUser;
     const session = data.session as SupabaseSession;
 
+    // Get onboarding status from database
+    const onboardingStatus = await getOnboardingStatus(user.id);
+
     return {
-      user: toPublicUser(user),
+      user: toPublicUser(user, onboardingStatus),
       tokens: toAuthTokens(session),
     };
   },
@@ -192,8 +244,11 @@ export const authService = {
     const user = data.user as SupabaseUser;
     const session = data.session as SupabaseSession;
 
+    // Get onboarding status from database
+    const onboardingStatus = await getOnboardingStatus(user.id);
+
     return {
-      user: toPublicUser(user),
+      user: toPublicUser(user, onboardingStatus),
       tokens: toAuthTokens(session),
     };
   },
@@ -213,7 +268,11 @@ export const authService = {
     }
 
     const user = data.user as SupabaseUser;
-    return toPublicUser(user);
+
+    // Get onboarding status from database
+    const onboardingStatus = await getOnboardingStatus(user.id);
+
+    return toPublicUser(user, onboardingStatus);
   },
 
   /**
@@ -231,7 +290,11 @@ export const authService = {
       }
 
       const user = data.user as SupabaseUser;
-      return toPublicUser(user);
+
+      // Get onboarding status from database
+      const onboardingStatus = await getOnboardingStatus(user.id);
+
+      return toPublicUser(user, onboardingStatus);
     } catch {
       return null;
     }

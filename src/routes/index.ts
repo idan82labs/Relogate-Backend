@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authRouter } from '../modules/auth/index.js';
+import { questionnaireRouter } from '../modules/questionnaire/index.js';
 
 const router = Router();
 
@@ -21,8 +22,10 @@ router.get('/health', (_req, res) => {
 // Auth routes: /api/v1/auth/*
 router.use('/auth', authRouter);
 
+// Questionnaire routes: /api/v1/questionnaire/*
+router.use('/questionnaire', questionnaireRouter);
+
 // TODO: Add more module routes here
 // router.use('/users', userRouter);
-// router.use('/questionnaire', questionnaireRouter);
 
 export const apiRouter = router;

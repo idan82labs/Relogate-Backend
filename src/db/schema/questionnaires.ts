@@ -2,21 +2,12 @@ import {
   pgTable,
   uuid,
   varchar,
-  text,
+  integer,
   timestamp,
   jsonb,
   pgEnum,
 } from 'drizzle-orm/pg-core';
 import { userProfiles } from './users.js';
-
-/**
- * Family status enum
- */
-export const familyStatusEnum = pgEnum('family_status', [
-  'single',
-  'married',
-  'married_with_children',
-]);
 
 /**
  * Questionnaire status enum
@@ -28,41 +19,82 @@ export const questionnaireStatusEnum = pgEnum('questionnaire_status', [
 ]);
 
 /**
- * Questionnaires table.
- *
- * Stores user questionnaire responses for relocation recommendations.
+ * Type definitions for questionnaire responses JSONB structure.
+ * These are documented here for TypeScript type safety.
  */
-export const questionnaires = pgTable('questionnaires', {
-  id: uuid('id').primaryKey().defaultRandom(),
+export interface QuestionnaireResponses {
+  /** Schema version for backward compatibility */
+  version: number;
 
-  // Link to user (optional - can be anonymous)
-  userId: uuid('user_id').references(() => userProfiles.id, {
-    onDelete: 'set null',
-  }),
+  /** Step 1: Country preferences */
+  preferredCountries?: string[];
 
-  // Questionnaire data
-  countries: jsonb('countries').$type<string[]>().notNull().default([]),
-  relocationReason: text('relocation_reason'),
-  familyStatus: familyStatusEnum('family_status'),
+  /** Step 2: Relocation reason (free text) */
+  relocationReason?: string;
 
-  // Spouse details (if married)
-  spouseDetails: jsonb('spouse_details').$type<{
-    firstName?: string;
-    lastName?: string;
-  }>(),
+  /** Step 3: Family status */
+  familyStatus?: string;
 
-  // Personal details (for anonymous users or additional info)
-  personalDetails: jsonb('personal_details').$type<{
-    firstName?: string;
-    lastName?: string;
+  /** Step 4: Personal details */
+  personalDetails?: {
+    fullName?: string;
     email?: string;
     phone?: string;
+    birthDate?: string;
     citizenship?: string;
-  }>(),
+    residenceCountry?: string;
+    additionalCitizenship?: string;
+  };
+
+  /** Step 4: Spouse details (conditional) */
+  spouseDetails?: {
+    birthDate?: string;
+    citizenship?: string;
+  };
+
+  /** Future fields can be added here without migrations */
+  [key: string]: unknown;
+}
+
+/**
+ * Type definitions for questionnaire results JSONB structure.
+ */
+export interface QuestionnaireRecommendation {
+  countryCode: string;
+  countryName: string;
+  matchScore: number;
+  categories: Array<{
+    name: string;
+    score: number;
+  }>;
+}
+
+/**
+ * Questionnaire responses table.
+ *
+ * Stores user questionnaire responses using JSONB for flexibility.
+ * The schema_version field allows handling different questionnaire versions.
+ */
+export const questionnaireResponses = pgTable('questionnaire_responses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  // Link to user (required - authenticated users only)
+  userId: uuid('user_id')
+    .references(() => userProfiles.id, { onDelete: 'cascade' })
+    .notNull(),
+
+  // Schema version for backward compatibility
+  schemaVersion: integer('schema_version').notNull().default(1),
+
+  // All responses stored in flexible JSONB
+  responses: jsonb('responses').$type<QuestionnaireResponses>().notNull().default({
+    version: 1,
+    preferredCountries: [],
+  }),
 
   // Status tracking
   status: questionnaireStatusEnum('status').default('in_progress').notNull(),
-  currentStep: varchar('current_step', { length: 50 }).default('countries'),
+  currentStep: varchar('current_step', { length: 50 }).default('countries').notNull(),
 
   // Timestamps
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
@@ -70,9 +102,13 @@ export const questionnaires = pgTable('questionnaires', {
   completedAt: timestamp('completed_at', { mode: 'date' }),
 });
 
+// Note: One in-progress questionnaire per user is enforced in the service layer
+// A partial unique index can be added manually in SQL if needed:
+// CREATE UNIQUE INDEX one_active_per_user ON questionnaire_responses(user_id) WHERE status = 'in_progress';
+
 // Type inference
-export type Questionnaire = typeof questionnaires.$inferSelect;
-export type NewQuestionnaire = typeof questionnaires.$inferInsert;
+export type QuestionnaireResponse = typeof questionnaireResponses.$inferSelect;
+export type NewQuestionnaireResponse = typeof questionnaireResponses.$inferInsert;
 
 /**
  * Questionnaire results table.
@@ -83,22 +119,12 @@ export const questionnaireResults = pgTable('questionnaire_results', {
   id: uuid('id').primaryKey().defaultRandom(),
 
   questionnaireId: uuid('questionnaire_id')
-    .references(() => questionnaires.id, { onDelete: 'cascade' })
+    .references(() => questionnaireResponses.id, { onDelete: 'cascade' })
     .notNull(),
 
-  // Results data
+  // Results data stored in JSONB
   recommendations: jsonb('recommendations')
-    .$type<
-      Array<{
-        countryCode: string;
-        countryName: string;
-        matchScore: number;
-        categories: Array<{
-          name: string;
-          score: number;
-        }>;
-      }>
-    >()
+    .$type<QuestionnaireRecommendation[]>()
     .notNull()
     .default([]),
 

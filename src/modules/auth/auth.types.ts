@@ -9,6 +9,11 @@ export interface UserMetadata {
 }
 
 /**
+ * Onboarding status values.
+ */
+export type OnboardingStatus = 'pending' | 'in_progress' | 'completed';
+
+/**
  * Public user data returned to clients.
  * Excludes sensitive information.
  */
@@ -18,6 +23,7 @@ export interface PublicUser {
   firstName: string;
   lastName: string;
   emailVerified: boolean;
+  onboardingStatus: OnboardingStatus;
   createdAt: string;
 }
 
@@ -55,14 +61,20 @@ export type SupabaseSession = Omit<Session, 'user'> & {
 
 /**
  * Helper to convert Supabase user to public user.
+ * Note: onboardingStatus defaults to 'pending' - should be overridden
+ * when user profile data is available from database.
  */
-export function toPublicUser(user: SupabaseUser): PublicUser {
+export function toPublicUser(
+  user: SupabaseUser,
+  onboardingStatus: OnboardingStatus = 'pending'
+): PublicUser {
   return {
     id: user.id,
     email: user.email ?? '',
     firstName: user.user_metadata?.firstName ?? '',
     lastName: user.user_metadata?.lastName ?? '',
     emailVerified: user.email_confirmed_at != null,
+    onboardingStatus,
     createdAt: user.created_at,
   };
 }

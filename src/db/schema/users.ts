@@ -4,7 +4,17 @@ import {
   varchar,
   timestamp,
   boolean,
+  pgEnum,
 } from 'drizzle-orm/pg-core';
+
+/**
+ * Onboarding status enum
+ */
+export const onboardingStatusEnum = pgEnum('onboarding_status', [
+  'pending',
+  'in_progress',
+  'completed',
+]);
 
 /**
  * User profiles table.
@@ -31,6 +41,10 @@ export const userProfiles = pgTable('user_profiles', {
   // Status
   isActive: boolean('is_active').default(true).notNull(),
   emailVerified: boolean('email_verified').default(false).notNull(),
+
+  // Onboarding
+  onboardingStatus: onboardingStatusEnum('onboarding_status').default('pending').notNull(),
+  onboardingCompletedAt: timestamp('onboarding_completed_at', { mode: 'date' }),
 
   // Timestamps
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
