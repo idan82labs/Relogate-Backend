@@ -37,6 +37,18 @@ export const registerSchema = z.object({
     .min(1, 'Last name is required')
     .max(100, 'Last name must not exceed 100 characters')
     .trim(),
+  idNumber: z
+    .string()
+    .max(20, 'ID number must not exceed 20 characters')
+    .optional(),
+  phone: z
+    .string()
+    .max(20, 'Phone number must not exceed 20 characters')
+    .optional(),
+  birthDate: z
+    .string()
+    .refine((val) => !val || !isNaN(Date.parse(val)), 'Invalid date format')
+    .optional(),
 });
 
 /**

@@ -31,6 +31,7 @@ export const userProfiles = pgTable('user_profiles', {
   // Profile information
   firstName: varchar('first_name', { length: 100 }).notNull(),
   lastName: varchar('last_name', { length: 100 }).notNull(),
+  idNumber: varchar('id_number', { length: 20 }),
   phone: varchar('phone', { length: 20 }),
   citizenship: varchar('citizenship', { length: 100 }),
   birthDate: timestamp('birth_date', { mode: 'date' }),

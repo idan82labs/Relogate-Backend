@@ -19,27 +19,37 @@ import type {
   PublicUser,
   SupabaseUser,
   SupabaseSession,
-  OnboardingStatus,
+  ProfileData,
 } from './auth.types.js';
 import { toPublicUser, toAuthTokens } from './auth.types.js';
 
 const logger = createModuleLogger('auth-service');
 
 /**
- * Helper to get user's onboarding status from database.
+ * Helper to get user's profile data from database.
  */
-async function getOnboardingStatus(userId: string): Promise<OnboardingStatus> {
+async function getProfileData(userId: string): Promise<ProfileData> {
   try {
     const [profile] = await db
-      .select({ onboardingStatus: userProfiles.onboardingStatus })
+      .select({
+        onboardingStatus: userProfiles.onboardingStatus,
+        idNumber: userProfiles.idNumber,
+        phone: userProfiles.phone,
+        birthDate: userProfiles.birthDate,
+      })
       .from(userProfiles)
       .where(eq(userProfiles.id, userId))
       .limit(1);
 
-    return profile?.onboardingStatus ?? 'pending';
+    return {
+      onboardingStatus: profile?.onboardingStatus ?? 'pending',
+      idNumber: profile?.idNumber,
+      phone: profile?.phone,
+      birthDate: profile?.birthDate,
+    };
   } catch (error) {
-    logger.warn({ userId, error }, 'Failed to get onboarding status, defaulting to pending');
-    return 'pending';
+    logger.warn({ userId, error }, 'Failed to get profile data, using defaults');
+    return { onboardingStatus: 'pending' };
   }
 }
 
@@ -49,13 +59,19 @@ async function getOnboardingStatus(userId: string): Promise<OnboardingStatus> {
 async function createUserProfile(
   userId: string,
   firstName: string,
-  lastName: string
+  lastName: string,
+  idNumber?: string,
+  phone?: string,
+  birthDate?: string
 ): Promise<void> {
   try {
     await db.insert(userProfiles).values({
       id: userId,
       firstName,
       lastName,
+      idNumber: idNumber || null,
+      phone: phone || null,
+      birthDate: birthDate ? new Date(birthDate) : null,
       onboardingStatus: 'pending',
     });
     logger.info({ userId }, 'User profile created');
@@ -79,7 +95,7 @@ export const authService = {
    * @throws ServiceUnavailableError if Supabase is unavailable
    */
   async register(input: RegisterInput): Promise<AuthResponse> {
-    const { email, password, firstName, lastName } = input;
+    const { email, password, firstName, lastName, idNumber, phone, birthDate } = input;
 
     logger.debug({ email }, 'Attempting user registration');
 
@@ -118,9 +134,14 @@ export const authService = {
       if (data.user && !data.session) {
         const user = data.user as SupabaseUser;
         // Create user profile in database
-        await createUserProfile(user.id, firstName, lastName);
+        await createUserProfile(user.id, firstName, lastName, idNumber, phone, birthDate);
         return {
-          user: toPublicUser(user, 'pending'),
+          user: toPublicUser(user, {
+            onboardingStatus: 'pending',
+            idNumber,
+            phone,
+            birthDate: birthDate ? new Date(birthDate) : undefined,
+          }),
           tokens: {
             accessToken: '',
             refreshToken: '',
@@ -139,10 +160,15 @@ export const authService = {
     const session = data.session as SupabaseSession;
 
     // Create user profile in database
-    await createUserProfile(user.id, firstName, lastName);
+    await createUserProfile(user.id, firstName, lastName, idNumber, phone, birthDate);
 
     return {
-      user: toPublicUser(user, 'pending'),
+      user: toPublicUser(user, {
+        onboardingStatus: 'pending',
+        idNumber,
+        phone,
+        birthDate: birthDate ? new Date(birthDate) : undefined,
+      }),
       tokens: toAuthTokens(session),
     };
   },
@@ -183,11 +209,11 @@ export const authService = {
     const user = data.user as SupabaseUser;
     const session = data.session as SupabaseSession;
 
-    // Get onboarding status from database
-    const onboardingStatus = await getOnboardingStatus(user.id);
+    // Get profile data from database
+    const profileData = await getProfileData(user.id);
 
     return {
-      user: toPublicUser(user, onboardingStatus),
+      user: toPublicUser(user, profileData),
       tokens: toAuthTokens(session),
     };
   },
@@ -244,11 +270,11 @@ export const authService = {
     const user = data.user as SupabaseUser;
     const session = data.session as SupabaseSession;
 
-    // Get onboarding status from database
-    const onboardingStatus = await getOnboardingStatus(user.id);
+    // Get profile data from database
+    const profileData = await getProfileData(user.id);
 
     return {
-      user: toPublicUser(user, onboardingStatus),
+      user: toPublicUser(user, profileData),
       tokens: toAuthTokens(session),
     };
   },
@@ -269,10 +295,10 @@ export const authService = {
 
     const user = data.user as SupabaseUser;
 
-    // Get onboarding status from database
-    const onboardingStatus = await getOnboardingStatus(user.id);
+    // Get profile data from database
+    const profileData = await getProfileData(user.id);
 
-    return toPublicUser(user, onboardingStatus);
+    return toPublicUser(user, profileData);
   },
 
   /**
@@ -291,10 +317,10 @@ export const authService = {
 
       const user = data.user as SupabaseUser;
 
-      // Get onboarding status from database
-      const onboardingStatus = await getOnboardingStatus(user.id);
+      // Get profile data from database
+      const profileData = await getProfileData(user.id);
 
-      return toPublicUser(user, onboardingStatus);
+      return toPublicUser(user, profileData);
     } catch {
       return null;
     }

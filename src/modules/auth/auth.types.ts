@@ -22,6 +22,9 @@ export interface PublicUser {
   email: string;
   firstName: string;
   lastName: string;
+  idNumber?: string;
+  phone?: string;
+  birthDate?: string;
   emailVerified: boolean;
   onboardingStatus: OnboardingStatus;
   createdAt: string;
@@ -60,19 +63,33 @@ export type SupabaseSession = Omit<Session, 'user'> & {
 };
 
 /**
+ * Profile data from database for extending PublicUser.
+ */
+export interface ProfileData {
+  onboardingStatus?: OnboardingStatus;
+  idNumber?: string | null;
+  phone?: string | null;
+  birthDate?: Date | null;
+}
+
+/**
  * Helper to convert Supabase user to public user.
  * Note: onboardingStatus defaults to 'pending' - should be overridden
  * when user profile data is available from database.
  */
 export function toPublicUser(
   user: SupabaseUser,
-  onboardingStatus: OnboardingStatus = 'pending'
+  profileData: ProfileData = {}
 ): PublicUser {
+  const { onboardingStatus = 'pending', idNumber, phone, birthDate } = profileData;
   return {
     id: user.id,
     email: user.email ?? '',
     firstName: user.user_metadata?.firstName ?? '',
     lastName: user.user_metadata?.lastName ?? '',
+    idNumber: idNumber || undefined,
+    phone: phone || undefined,
+    birthDate: birthDate ? birthDate.toISOString().split('T')[0] : undefined,
     emailVerified: user.email_confirmed_at != null,
     onboardingStatus,
     createdAt: user.created_at,
