@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { adminService } from './admin.service.js';
 import { createModuleLogger } from '../../config/logger.js';
-import type { ListUsersQuery, CreateUserInput, UpdateUserInput, UserIdParam } from './admin.schema.js';
+import type { ListUsersQuery, CreateUserInput, UserIdParam } from './admin.schema.js';
 
 const logger = createModuleLogger('admin-controller');
 
@@ -19,7 +19,7 @@ export const adminController = {
     res: Response
   ): Promise<void> {
     // Query is validated and transformed by validateQuery middleware
-    const query = req.query as unknown as ListUsersQuery;
+    const query = (req as Request & { validatedQuery: ListUsersQuery }).validatedQuery;
     logger.debug({ query }, 'List users request');
 
     const result = await adminService.listUsers(query);
@@ -35,10 +35,10 @@ export const adminController = {
    * Get a user by ID with their questionnaires.
    */
   async getUserById(
-    req: Request<UserIdParam>,
+    req: Request,
     res: Response
   ): Promise<void> {
-    const { userId } = req.params;
+    const { userId } = (req as Request & { validatedParams: UserIdParam }).validatedParams;
     logger.debug({ userId }, 'Get user by ID request');
 
     const user = await adminService.getUserById(userId);
@@ -76,10 +76,10 @@ export const adminController = {
    * Update a user's profile.
    */
   async updateUser(
-    req: Request<UserIdParam, object, UpdateUserInput>,
+    req: Request,
     res: Response
   ): Promise<void> {
-    const { userId } = req.params;
+    const { userId } = (req as Request & { validatedParams: UserIdParam }).validatedParams;
     logger.debug({ userId, updates: req.body }, 'Update user request');
 
     const user = await adminService.updateUser(userId, req.body);
@@ -98,10 +98,10 @@ export const adminController = {
    * Delete (deactivate) a user.
    */
   async deleteUser(
-    req: Request<UserIdParam>,
+    req: Request,
     res: Response
   ): Promise<void> {
-    const { userId } = req.params;
+    const { userId } = (req as Request & { validatedParams: UserIdParam }).validatedParams;
     const hardDelete = req.query.hard === 'true';
 
     logger.debug({ userId, hardDelete }, 'Delete user request');

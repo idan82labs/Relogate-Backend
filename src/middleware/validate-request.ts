@@ -52,10 +52,12 @@ export function validateRequest<T>(schema: ZodSchema<T>) {
 
 /**
  * Validate query parameters against a Zod schema.
+ * Stores validated query in req.validatedQuery (Express 5 makes req.query read-only).
  *
  * Usage:
  * ```ts
  * router.get('/users', validateQuery(listUsersSchema), userController.list);
+ * // Access via req.validatedQuery in controller
  * ```
  */
 export function validateQuery<T>(schema: ZodSchema<T>) {
@@ -66,7 +68,8 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
   ): Promise<void> => {
     try {
       const validated = await schema.parseAsync(req.query);
-      req.query = validated as typeof req.query;
+      // Store validated query in custom property (req.query is read-only in Express 5)
+      (req as Request & { validatedQuery: T }).validatedQuery = validated;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -91,10 +94,12 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
 
 /**
  * Validate URL parameters against a Zod schema.
+ * Stores validated params in req.validatedParams (Express 5 may make req.params read-only).
  *
  * Usage:
  * ```ts
  * router.get('/users/:id', validateParams(userIdSchema), userController.get);
+ * // Access via req.validatedParams in controller
  * ```
  */
 export function validateParams<T>(schema: ZodSchema<T>) {
@@ -105,7 +110,8 @@ export function validateParams<T>(schema: ZodSchema<T>) {
   ): Promise<void> => {
     try {
       const validated = await schema.parseAsync(req.params);
-      req.params = validated as typeof req.params;
+      // Store validated params in custom property for consistency with validateQuery
+      (req as Request & { validatedParams: T }).validatedParams = validated;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
