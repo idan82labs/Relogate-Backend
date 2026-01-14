@@ -17,6 +17,14 @@ export const onboardingStatusEnum = pgEnum('onboarding_status', [
 ]);
 
 /**
+ * User role enum
+ */
+export const userRoleEnum = pgEnum('user_role', [
+  'user',
+  'admin',
+]);
+
+/**
  * User profiles table.
  *
  * Note: Authentication is handled by Supabase Auth (auth.users).
@@ -42,6 +50,9 @@ export const userProfiles = pgTable('user_profiles', {
   // Status
   isActive: boolean('is_active').default(true).notNull(),
   emailVerified: boolean('email_verified').default(false).notNull(),
+
+  // Role
+  role: userRoleEnum('role').default('user').notNull(),
 
   // Onboarding
   onboardingStatus: onboardingStatusEnum('onboarding_status').default('pending').notNull(),

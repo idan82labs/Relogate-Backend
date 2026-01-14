@@ -33,6 +33,7 @@ async function getProfileData(userId: string): Promise<ProfileData> {
     const [profile] = await db
       .select({
         onboardingStatus: userProfiles.onboardingStatus,
+        role: userProfiles.role,
         idNumber: userProfiles.idNumber,
         phone: userProfiles.phone,
         birthDate: userProfiles.birthDate,
@@ -43,13 +44,14 @@ async function getProfileData(userId: string): Promise<ProfileData> {
 
     return {
       onboardingStatus: profile?.onboardingStatus ?? 'pending',
+      role: profile?.role ?? 'user',
       idNumber: profile?.idNumber,
       phone: profile?.phone,
       birthDate: profile?.birthDate,
     };
   } catch (error) {
     logger.warn({ userId, error }, 'Failed to get profile data, using defaults');
-    return { onboardingStatus: 'pending' };
+    return { onboardingStatus: 'pending', role: 'user' };
   }
 }
 
@@ -138,6 +140,7 @@ export const authService = {
         return {
           user: toPublicUser(user, {
             onboardingStatus: 'pending',
+            role: 'user',
             idNumber,
             phone,
             birthDate: birthDate ? new Date(birthDate) : undefined,
@@ -165,6 +168,7 @@ export const authService = {
     return {
       user: toPublicUser(user, {
         onboardingStatus: 'pending',
+        role: 'user',
         idNumber,
         phone,
         birthDate: birthDate ? new Date(birthDate) : undefined,

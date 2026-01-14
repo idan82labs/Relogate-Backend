@@ -14,6 +14,11 @@ export interface UserMetadata {
 export type OnboardingStatus = 'pending' | 'in_progress' | 'completed';
 
 /**
+ * User role values.
+ */
+export type UserRole = 'user' | 'admin';
+
+/**
  * Public user data returned to clients.
  * Excludes sensitive information.
  */
@@ -27,6 +32,7 @@ export interface PublicUser {
   birthDate?: string;
   emailVerified: boolean;
   onboardingStatus: OnboardingStatus;
+  role: UserRole;
   createdAt: string;
 }
 
@@ -67,6 +73,7 @@ export type SupabaseSession = Omit<Session, 'user'> & {
  */
 export interface ProfileData {
   onboardingStatus?: OnboardingStatus;
+  role?: UserRole;
   idNumber?: string | null;
   phone?: string | null;
   birthDate?: Date | null;
@@ -81,7 +88,7 @@ export function toPublicUser(
   user: SupabaseUser,
   profileData: ProfileData = {}
 ): PublicUser {
-  const { onboardingStatus = 'pending', idNumber, phone, birthDate } = profileData;
+  const { onboardingStatus = 'pending', role = 'user', idNumber, phone, birthDate } = profileData;
   return {
     id: user.id,
     email: user.email ?? '',
@@ -92,6 +99,7 @@ export function toPublicUser(
     birthDate: birthDate ? birthDate.toISOString().split('T')[0] : undefined,
     emailVerified: user.email_confirmed_at != null,
     onboardingStatus,
+    role,
     createdAt: user.created_at,
   };
 }
