@@ -1,4 +1,5 @@
 import type { Country, NewCountry, CountryCategories } from '../../src/db/schema/countries.js';
+import type { ListCountriesQuery } from '../../src/modules/countries/countries.schema.js';
 
 /**
  * Valid country data for testing
@@ -82,3 +83,16 @@ export const fullCategories: CountryCategories = {
   distance: 'מרחק מישראל',
   community: 'קהילה',
 };
+
+/**
+ * Create mock list countries query with defaults
+ */
+export const createMockListCountriesQuery = (
+  overrides: Partial<ListCountriesQuery> = {}
+): ListCountriesQuery => ({
+  page: 1,
+  limit: 20,
+  sortBy: 'createdAt',
+  sortOrder: 'desc',
+  ...overrides,
+});

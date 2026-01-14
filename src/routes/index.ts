@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authRouter } from '../modules/auth/index.js';
 import { questionnaireRouter } from '../modules/questionnaire/index.js';
 import { adminRouter } from '../modules/admin/index.js';
+import { countriesAdminRouter, countriesPublicRouter } from '../modules/countries/index.js';
 
 const router = Router();
 
@@ -26,7 +27,13 @@ router.use('/auth', authRouter);
 // Questionnaire routes: /api/v1/questionnaire/*
 router.use('/questionnaire', questionnaireRouter);
 
+// Countries routes: /api/v1/countries/* (public)
+router.use('/countries', countriesPublicRouter);
+
 // Admin routes: /api/v1/admin/*
 router.use('/admin', adminRouter);
+
+// Admin countries routes: /api/v1/admin/countries/*
+router.use('/admin/countries', countriesAdminRouter);
 
 export const apiRouter = router;
