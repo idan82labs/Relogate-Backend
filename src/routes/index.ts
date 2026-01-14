@@ -3,6 +3,7 @@ import { authRouter } from '../modules/auth/index.js';
 import { questionnaireRouter } from '../modules/questionnaire/index.js';
 import { adminRouter } from '../modules/admin/index.js';
 import { countriesAdminRouter, countriesPublicRouter } from '../modules/countries/index.js';
+import { reportsAdminRouter, reportsPublicRouter } from '../modules/reports/index.js';
 
 const router = Router();
 
@@ -35,5 +36,11 @@ router.use('/admin', adminRouter);
 
 // Admin countries routes: /api/v1/admin/countries/*
 router.use('/admin/countries', countriesAdminRouter);
+
+// Reports routes: /api/v1/reports/* (authenticated users)
+router.use('/reports', reportsPublicRouter);
+
+// Admin reports routes: /api/v1/admin/reports/*
+router.use('/admin/reports', reportsAdminRouter);
 
 export const apiRouter = router;

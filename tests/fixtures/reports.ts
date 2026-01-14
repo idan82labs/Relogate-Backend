@@ -6,6 +6,7 @@ import type {
   ReportProfileSummary,
   PersonalizedContent,
 } from '../../src/db/schema/reports.js';
+import type { ListReportsQuery } from '../../src/modules/reports/reports.schema.js';
 
 /**
  * Valid report data for testing
@@ -116,3 +117,26 @@ export const samplePersonalizedContent: PersonalizedContent = {
     'מסלול הגירה ברור ויציב',
   ],
 };
+
+/**
+ * Create mock list reports query with defaults
+ */
+export const createMockListReportsQuery = (
+  overrides: Partial<ListReportsQuery> = {}
+): ListReportsQuery => ({
+  page: 1,
+  limit: 20,
+  sortBy: 'createdAt',
+  sortOrder: 'desc',
+  ...overrides,
+});
+
+/**
+ * Create mock user info
+ */
+export const createMockUserInfo = (overrides: Partial<{ id: string; firstName: string | null; lastName: string | null }> = {}) => ({
+  id: 'user-uuid-123',
+  firstName: 'ישראל',
+  lastName: 'ישראלי',
+  ...overrides,
+});
