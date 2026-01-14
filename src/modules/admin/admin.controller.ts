@@ -103,10 +103,16 @@ export const adminController = {
   ): Promise<void> {
     const { userId } = (req as Request & { validatedParams: UserIdParam }).validatedParams;
     const hardDelete = req.query.hard === 'true';
+    const adminUserId = req.user?.id;
 
-    logger.debug({ userId, hardDelete }, 'Delete user request');
+    if (!adminUserId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
 
-    await adminService.deleteUser(userId, hardDelete);
+    logger.debug({ userId, adminUserId, hardDelete }, 'Delete user request');
+
+    await adminService.deleteUser(userId, adminUserId, hardDelete);
 
     logger.info({ userId, hardDelete }, 'User deleted by admin');
 

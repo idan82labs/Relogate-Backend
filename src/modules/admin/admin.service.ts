@@ -343,12 +343,19 @@ export const adminService = {
    * Delete a user.
    * This soft-deletes by setting isActive to false, or hard-deletes from auth.
    *
-   * @param userId - The user ID
+   * @param userId - The user ID to delete
+   * @param adminUserId - The current admin's user ID (to prevent self-deletion)
    * @param hardDelete - If true, permanently delete user and auth record
    * @throws NotFoundError if user not found
+   * @throws BadRequestError if trying to delete self
    */
-  async deleteUser(userId: string, hardDelete = false): Promise<void> {
-    logger.debug({ userId, hardDelete }, 'Deleting user');
+  async deleteUser(userId: string, adminUserId: string, hardDelete = false): Promise<void> {
+    logger.debug({ userId, adminUserId, hardDelete }, 'Deleting user');
+
+    // Prevent admin from deleting themselves
+    if (userId === adminUserId) {
+      throw new BadRequestError('Cannot delete your own account');
+    }
 
     // Check if user exists
     const [existingProfile] = await db
