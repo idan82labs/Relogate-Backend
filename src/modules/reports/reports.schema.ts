@@ -17,37 +17,54 @@ export const profileSummarySchema = z.object({
 export type ProfileSummaryInput = z.infer<typeof profileSummarySchema>;
 
 /**
- * Personalized content schema for country response
+ * Destination info schema (inline, self-contained)
  */
-export const personalizedContentSchema = z.object({
-  visaPath: z.string().optional(),
-  howYouFit: z.string().optional(),
-  whyRightForYou: z.string().optional(),
-  advantages: z.array(z.string()).optional(),
+export const destinationSchema = z.object({
+  name: z.string().min(1).max(200),
+  subtitle: z.string().max(200).nullable().optional(),
+  image: z.string().url().nullable().optional(),
+  badge: z.string().max(100).nullable().optional(),
 });
 
-export type PersonalizedContentInput = z.infer<typeof personalizedContentSchema>;
+export type DestinationInput = z.infer<typeof destinationSchema>;
 
 /**
- * Category overrides schema
+ * Match info schema
  */
-export const categoryOverridesSchema = z.object({
-  general: z.string().optional(),
-  visa: z.string().optional(),
-  language: z.string().optional(),
-  safety: z.string().optional(),
-  jewish: z.string().optional(),
-  openness: z.string().optional(),
-  healthcare: z.string().optional(),
-  education: z.string().optional(),
-  employment: z.string().optional(),
-  transport: z.string().optional(),
-  cost: z.string().optional(),
-  distance: z.string().optional(),
-  community: z.string().optional(),
+export const matchSchema = z.object({
+  score: z.number().int().min(0).max(100).default(0),
+  reasons: z.array(z.string()).default([]),
+  visaType: z.string().max(200).nullable().optional(),
 });
 
-export type CategoryOverridesInput = z.infer<typeof categoryOverridesSchema>;
+export type MatchInput = z.infer<typeof matchSchema>;
+
+/**
+ * Narrative content schema (personalized story)
+ */
+export const narrativeSchema = z.object({
+  introduction: z.string().optional(),
+  pathway: z.string().optional(),
+  fit: z.string().optional(),
+  benefits: z.string().optional(),
+  highlights: z.array(z.string()).optional(),
+});
+
+export type NarrativeInput = z.infer<typeof narrativeSchema>;
+
+/**
+ * Section schema (flexible content sections)
+ */
+export const sectionSchema = z.object({
+  id: z.string().uuid().optional(), // Auto-generate if not provided
+  key: z.string().min(1).max(50),
+  title: z.string().min(1).max(200),
+  icon: z.string().max(50).optional(),
+  content: z.string(),
+  position: z.number().int().min(0),
+});
+
+export type SectionInput = z.infer<typeof sectionSchema>;
 
 /**
  * List reports query schema (admin)
@@ -104,58 +121,61 @@ export const updateReportSchema = z.object({
 export type UpdateReportInput = z.infer<typeof updateReportSchema>;
 
 /**
- * Publish report schema (publishes report and optionally countries)
+ * Publish report schema (publishes report and optionally destinations)
  */
 export const publishReportSchema = z.object({
-  publishCountries: z.boolean().default(true),
+  publishDestinations: z.boolean().default(true),
 });
 
 export type PublishReportInput = z.infer<typeof publishReportSchema>;
 
 /**
- * Country response ID param schema
+ * Destination response ID param schema
  */
-export const countryResponseIdParamSchema = z.object({
-  responseId: z.string().uuid(),
+export const destinationResponseIdParamSchema = z.object({
+  destinationId: z.string().uuid(),
 });
 
-export type CountryResponseIdParam = z.infer<typeof countryResponseIdParamSchema>;
+export type DestinationResponseIdParam = z.infer<typeof destinationResponseIdParamSchema>;
 
 /**
- * Create country response schema (admin adds country to report)
+ * Create destination response schema (admin adds destination to report)
  */
-export const createCountryResponseSchema = z.object({
+export const createDestinationResponseSchema = z.object({
   reportId: z.string().uuid(),
-  countryId: z.string().uuid(),
   displayOrder: z.number().int().min(1).optional().default(1),
-  matchScore: z.number().int().min(0).max(100).optional().default(0),
-  visaType: z.string().max(200).optional(),
-  matchReasons: z.array(z.string()).optional().default([]),
-  personalizedContent: personalizedContentSchema.optional().default({}),
-  categoryOverrides: categoryOverridesSchema.nullable().optional(),
+  destination: destinationSchema,
+  match: matchSchema.optional().default({ score: 0, reasons: [] }),
+  narrative: narrativeSchema.optional().default({}),
+  sections: z.array(sectionSchema).optional().default([]),
 });
 
-export type CreateCountryResponseInput = z.infer<typeof createCountryResponseSchema>;
+export type CreateDestinationResponseInput = z.infer<typeof createDestinationResponseSchema>;
 
 /**
- * Update country response schema (admin edits country response)
+ * Update destination response schema (admin edits destination response)
  */
-export const updateCountryResponseSchema = z.object({
+export const updateDestinationResponseSchema = z.object({
   displayOrder: z.number().int().min(1).optional(),
-  matchScore: z.number().int().min(0).max(100).optional(),
-  visaType: z.string().max(200).nullable().optional(),
-  matchReasons: z.array(z.string()).optional(),
-  personalizedContent: personalizedContentSchema.optional(),
-  categoryOverrides: categoryOverridesSchema.nullable().optional(),
+  destination: destinationSchema.partial().optional(),
+  match: matchSchema.partial().optional(),
+  narrative: narrativeSchema.optional(),
+  sections: z.array(sectionSchema).optional(),
 });
 
-export type UpdateCountryResponseInput = z.infer<typeof updateCountryResponseSchema>;
+export type UpdateDestinationResponseInput = z.infer<typeof updateDestinationResponseSchema>;
 
 /**
- * Publish country response schema
+ * Publish destination response schema
  */
-export const publishCountryResponseSchema = z.object({
+export const publishDestinationResponseSchema = z.object({
   publish: z.boolean().default(true),
 });
 
-export type PublishCountryResponseInput = z.infer<typeof publishCountryResponseSchema>;
+export type PublishDestinationResponseInput = z.infer<typeof publishDestinationResponseSchema>;
+
+// Legacy schema aliases for backwards compatibility
+/** @deprecated Use destinationResponseIdParamSchema instead */
+export const countryResponseIdParamSchema = destinationResponseIdParamSchema;
+/** @deprecated Use CreateDestinationResponseInput instead */
+export type CountryResponseIdParam = DestinationResponseIdParam;

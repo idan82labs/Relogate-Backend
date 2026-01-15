@@ -1,33 +1,34 @@
-import { eq, desc, asc, and, count, sql, isNull } from 'drizzle-orm';
+import { eq, desc, asc, and, count, sql, isNull, inArray } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import { db } from '../../db/index.js';
-import { questionnaireReports, countryResponses } from '../../db/schema/reports.js';
+import { questionnaireReports, destinationResponses } from '../../db/schema/reports.js';
 import { questionnaireResponses } from '../../db/schema/questionnaires.js';
 import { userProfiles } from '../../db/schema/users.js';
-import { countries } from '../../db/schema/countries.js';
 import { createModuleLogger } from '../../config/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../lib/errors.js';
+import { notificationsService } from '../notifications/notifications.service.js';
 import type {
   ReportListResponse,
   ReportListItem,
   ReportFull,
-  CountryResponseListItem,
-  CountryResponseFull,
+  DestinationResponseListItem,
+  DestinationResponseFull,
   PendingQuestionnairesResponse,
   UserReport,
-  UserCountryResponse,
+  UserDestinationResponse,
   UserReportStatus,
-  CountryInfo,
   UserInfo,
+  DestinationInfo,
+  MatchInfo,
 } from './reports.types.js';
 import type {
   ListReportsQuery,
   CreateReportInput,
   UpdateReportInput,
-  CreateCountryResponseInput,
-  UpdateCountryResponseInput,
+  CreateDestinationResponseInput,
+  UpdateDestinationResponseInput,
 } from './reports.schema.js';
-import type { ReportProfileSummary, PersonalizedContent, CategoryOverrides } from '../../db/schema/reports.js';
-import type { CountryCategories } from '../../db/schema/countries.js';
+import type { ReportProfileSummary, DestinationNarrative, DestinationSection } from '../../db/schema/reports.js';
 
 const logger = createModuleLogger('reports-service');
 
@@ -43,21 +44,31 @@ function toUserInfo(user: { id: string; firstName: string | null; lastName: stri
 }
 
 /**
- * Helper to map country to CountryInfo
+ * Helper to build DestinationInfo from response row
  */
-function toCountryInfo(country: typeof countries.$inferSelect): CountryInfo {
+function toDestinationInfo(response: typeof destinationResponses.$inferSelect): DestinationInfo {
   return {
-    id: country.id,
-    code: country.code,
-    name: country.name,
-    englishName: country.englishName,
-    flagImage: country.flagImage,
+    name: response.destinationName,
+    subtitle: response.destinationSubtitle,
+    image: response.destinationImage,
+    badge: response.destinationBadge,
+  };
+}
+
+/**
+ * Helper to build MatchInfo from response row
+ */
+function toMatchInfo(response: typeof destinationResponses.$inferSelect): MatchInfo {
+  return {
+    score: response.matchScore,
+    reasons: response.matchReasons as string[],
+    visaType: response.visaType,
   };
 }
 
 /**
  * Reports service.
- * Handles CRUD operations for reports and country responses.
+ * Handles CRUD operations for reports and destination responses.
  */
 export const reportsService = {
   // ================== ADMIN: Reports ==================
@@ -132,18 +143,18 @@ export const reportsService = {
       });
     }
 
-    // Get country response counts for each report
+    // Get destination response counts for each report
     const reportIds = filteredReports.map(r => r.report.id);
     const responseCounts = reportIds.length > 0
       ? await db
           .select({
-            reportId: countryResponses.reportId,
+            reportId: destinationResponses.reportId,
             total: count(),
-            published: sql<number>`COUNT(*) FILTER (WHERE ${countryResponses.status} = 'published')`,
+            published: sql<number>`COUNT(*) FILTER (WHERE ${destinationResponses.status} = 'published')`,
           })
-          .from(countryResponses)
-          .where(sql`${countryResponses.reportId} = ANY(${reportIds})`)
-          .groupBy(countryResponses.reportId)
+          .from(destinationResponses)
+          .where(inArray(destinationResponses.reportId, reportIds))
+          .groupBy(destinationResponses.reportId)
       : [];
 
     const countMap = new Map(responseCounts.map(c => [c.reportId, { total: c.total, published: c.published }]));
@@ -156,8 +167,8 @@ export const reportsService = {
         user: toUserInfo(row.user!),
         questionnaireId: row.report.questionnaireId,
         status: row.report.status,
-        countryResponseCount: counts.total,
-        publishedCountryCount: counts.published,
+        destinationCount: counts.total,
+        publishedDestinationCount: counts.published,
         publishedAt: row.report.publishedAt?.toISOString() ?? null,
         createdAt: row.report.createdAt.toISOString(),
         updatedAt: row.report.updatedAt.toISOString(),
@@ -208,7 +219,6 @@ export const reportsService = {
     const rows = await db
       .select({
         questionnaire: questionnaireResponses,
-        report: questionnaireReports,
         user: {
           id: userProfiles.id,
           firstName: userProfiles.firstName,
@@ -221,7 +231,12 @@ export const reportsService = {
         eq(questionnaireResponses.id, questionnaireReports.questionnaireId)
       )
       .leftJoin(userProfiles, eq(questionnaireResponses.userId, userProfiles.id))
-      .where(eq(questionnaireResponses.status, 'completed'))
+      .where(
+        and(
+          eq(questionnaireResponses.status, 'completed'),
+          isNull(questionnaireReports.id)
+        )
+      )
       .orderBy(desc(questionnaireResponses.completedAt))
       .limit(limit)
       .offset(offset);
@@ -231,10 +246,10 @@ export const reportsService = {
       user: toUserInfo(row.user!),
       countries: row.questionnaire.responses?.preferredCountries ?? [],
       submittedAt: row.questionnaire.completedAt?.toISOString() ?? row.questionnaire.createdAt.toISOString(),
-      reportExists: !!row.report,
+      reportExists: false,
     }));
 
-    logger.info({ page, limit, total, pending: questionnaires.filter(q => !q.reportExists).length }, 'Pending questionnaires retrieved');
+    logger.info({ page, limit, total, pending: questionnaires.length }, 'Pending questionnaires retrieved');
 
     return {
       questionnaires,
@@ -272,25 +287,20 @@ export const reportsService = {
       throw new NotFoundError('Report');
     }
 
-    // Get country responses
+    // Get destination responses
     const responseRows = await db
-      .select({
-        response: countryResponses,
-        country: countries,
-      })
-      .from(countryResponses)
-      .leftJoin(countries, eq(countryResponses.countryId, countries.id))
-      .where(eq(countryResponses.reportId, reportId))
-      .orderBy(asc(countryResponses.displayOrder));
+      .select()
+      .from(destinationResponses)
+      .where(eq(destinationResponses.reportId, reportId))
+      .orderBy(asc(destinationResponses.displayOrder));
 
-    const countryResponsesList: CountryResponseListItem[] = responseRows.map(row => ({
-      id: row.response.id,
-      country: toCountryInfo(row.country!),
-      displayOrder: row.response.displayOrder,
-      matchScore: row.response.matchScore,
-      visaType: row.response.visaType,
-      status: row.response.status,
-      publishedAt: row.response.publishedAt?.toISOString() ?? null,
+    const destinations: DestinationResponseListItem[] = responseRows.map(row => ({
+      id: row.id,
+      destination: toDestinationInfo(row),
+      displayOrder: row.displayOrder,
+      match: toMatchInfo(row),
+      status: row.status,
+      publishedAt: row.publishedAt?.toISOString() ?? null,
     }));
 
     logger.info({ reportId }, 'Report retrieved');
@@ -302,7 +312,7 @@ export const reportsService = {
       greeting: reportRow.report.greeting,
       profileSummary: reportRow.report.profileSummary as ReportProfileSummary,
       status: reportRow.report.status,
-      countryResponses: countryResponsesList,
+      destinations,
       publishedAt: reportRow.report.publishedAt?.toISOString() ?? null,
       createdAt: reportRow.report.createdAt.toISOString(),
       updatedAt: reportRow.report.updatedAt.toISOString(),
@@ -424,10 +434,10 @@ export const reportsService = {
   },
 
   /**
-   * Publish a report (and optionally all its country responses).
+   * Publish a report (and optionally all its destination responses).
    */
-  async publishReport(reportId: string, publishCountries: boolean = true): Promise<ReportFull> {
-    logger.debug({ reportId, publishCountries }, 'Publishing report');
+  async publishReport(reportId: string, publishDestinations: boolean = true): Promise<ReportFull> {
+    logger.debug({ reportId, publishDestinations }, 'Publishing report');
 
     // Check if report exists
     const [existing] = await db
@@ -452,10 +462,10 @@ export const reportsService = {
       })
       .where(eq(questionnaireReports.id, reportId));
 
-    // Optionally publish all country responses
-    if (publishCountries) {
+    // Optionally publish all destination responses
+    if (publishDestinations) {
       await db
-        .update(countryResponses)
+        .update(destinationResponses)
         .set({
           status: 'published',
           publishedAt: now,
@@ -463,19 +473,28 @@ export const reportsService = {
         })
         .where(
           and(
-            eq(countryResponses.reportId, reportId),
-            eq(countryResponses.status, 'draft')
+            eq(destinationResponses.reportId, reportId),
+            eq(destinationResponses.status, 'draft')
           )
         );
     }
 
-    logger.info({ reportId, publishCountries }, 'Report published');
+    logger.info({ reportId, publishDestinations }, 'Report published');
+
+    // Send notification to user that their report is ready
+    try {
+      await notificationsService.notifyReportReady(existing.userId, reportId);
+      logger.info({ reportId, userId: existing.userId }, 'User notified about report publication');
+    } catch (notifyError) {
+      // Don't fail the publish operation if notification fails
+      logger.error({ reportId, userId: existing.userId, error: notifyError }, 'Failed to send report notification');
+    }
 
     return this.getReportById(reportId);
   },
 
   /**
-   * Delete a report and all its country responses.
+   * Delete a report and all its destination responses.
    */
   async deleteReport(reportId: string): Promise<void> {
     logger.debug({ reportId }, 'Deleting report');
@@ -491,7 +510,7 @@ export const reportsService = {
       throw new NotFoundError('Report');
     }
 
-    // Delete report (country responses cascade delete)
+    // Delete report (destination responses cascade delete)
     await db
       .delete(questionnaireReports)
       .where(eq(questionnaireReports.id, reportId));
@@ -499,54 +518,48 @@ export const reportsService = {
     logger.info({ reportId }, 'Report deleted');
   },
 
-  // ================== ADMIN: Country Responses ==================
+  // ================== ADMIN: Destination Responses ==================
 
   /**
-   * Get a country response by ID with all details.
+   * Get a destination response by ID with all details.
    */
-  async getCountryResponseById(responseId: string): Promise<CountryResponseFull> {
-    logger.debug({ responseId }, 'Getting country response by ID');
+  async getDestinationResponseById(destinationId: string): Promise<DestinationResponseFull> {
+    logger.debug({ destinationId }, 'Getting destination response by ID');
 
     const [row] = await db
-      .select({
-        response: countryResponses,
-        country: countries,
-      })
-      .from(countryResponses)
-      .leftJoin(countries, eq(countryResponses.countryId, countries.id))
-      .where(eq(countryResponses.id, responseId))
+      .select()
+      .from(destinationResponses)
+      .where(eq(destinationResponses.id, destinationId))
       .limit(1);
 
     if (!row) {
-      throw new NotFoundError('Country response');
+      throw new NotFoundError('Destination response');
     }
 
-    logger.info({ responseId }, 'Country response retrieved');
+    logger.info({ destinationId }, 'Destination response retrieved');
 
     return {
-      id: row.response.id,
-      reportId: row.response.reportId,
-      country: toCountryInfo(row.country!),
-      displayOrder: row.response.displayOrder,
-      matchScore: row.response.matchScore,
-      visaType: row.response.visaType,
-      matchReasons: row.response.matchReasons as string[],
-      personalizedContent: row.response.personalizedContent as PersonalizedContent,
-      categoryOverrides: row.response.categoryOverrides as CategoryOverrides | null,
-      status: row.response.status,
-      publishedAt: row.response.publishedAt?.toISOString() ?? null,
-      createdAt: row.response.createdAt.toISOString(),
-      updatedAt: row.response.updatedAt.toISOString(),
+      id: row.id,
+      reportId: row.reportId,
+      displayOrder: row.displayOrder,
+      destination: toDestinationInfo(row),
+      match: toMatchInfo(row),
+      narrative: row.narrative as DestinationNarrative,
+      sections: row.sections as DestinationSection[],
+      status: row.status,
+      publishedAt: row.publishedAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
     };
   },
 
   /**
-   * Create a new country response for a report.
+   * Create a new destination response for a report.
    */
-  async createCountryResponse(input: CreateCountryResponseInput): Promise<CountryResponseFull> {
-    const { reportId, countryId, displayOrder, matchScore, visaType, matchReasons, personalizedContent, categoryOverrides } = input;
+  async createDestinationResponse(input: CreateDestinationResponseInput): Promise<DestinationResponseFull> {
+    const { reportId, displayOrder, destination, match, narrative, sections } = input;
 
-    logger.debug({ reportId, countryId }, 'Creating country response');
+    logger.debug({ reportId, destinationName: destination.name }, 'Creating destination response');
 
     // Check if report exists
     const [report] = await db
@@ -559,73 +572,56 @@ export const reportsService = {
       throw new NotFoundError('Report');
     }
 
-    // Check if country exists
-    const [country] = await db
-      .select({ id: countries.id })
-      .from(countries)
-      .where(eq(countries.id, countryId))
-      .limit(1);
+    // Process sections to ensure they all have IDs
+    const processedSections = (sections ?? []).map((section, index) => ({
+      ...section,
+      id: section.id ?? randomUUID(),
+      position: section.position ?? index,
+    }));
 
-    if (!country) {
-      throw new NotFoundError('Country');
-    }
-
-    // Check if country response already exists for this report+country
-    const [existing] = await db
-      .select({ id: countryResponses.id })
-      .from(countryResponses)
-      .where(
-        and(
-          eq(countryResponses.reportId, reportId),
-          eq(countryResponses.countryId, countryId)
-        )
-      )
-      .limit(1);
-
-    if (existing) {
-      throw new ConflictError('Country response already exists for this report');
-    }
-
-    // Create country response
+    // Create destination response
     const [newResponse] = await db
-      .insert(countryResponses)
+      .insert(destinationResponses)
       .values({
         reportId,
-        countryId,
         displayOrder: displayOrder ?? 1,
-        matchScore: matchScore ?? 0,
-        visaType: visaType ?? null,
-        matchReasons: matchReasons ?? [],
-        personalizedContent: personalizedContent ?? {},
-        categoryOverrides: categoryOverrides ?? null,
+        destinationName: destination.name,
+        destinationSubtitle: destination.subtitle ?? null,
+        destinationImage: destination.image ?? null,
+        destinationBadge: destination.badge ?? null,
+        matchScore: match?.score ?? 0,
+        visaType: match?.visaType ?? null,
+        matchReasons: match?.reasons ?? [],
+        narrative: narrative ?? {},
+        sections: processedSections,
         status: 'draft',
       })
       .returning();
 
     if (!newResponse) {
-      throw new Error('Failed to create country response');
+      throw new Error('Failed to create destination response');
     }
 
-    logger.info({ responseId: newResponse.id, reportId, countryId }, 'Country response created');
+    logger.info({ destinationId: newResponse.id, reportId, destinationName: destination.name }, 'Destination response created');
 
-    return this.getCountryResponseById(newResponse.id);
+    return this.getDestinationResponseById(newResponse.id);
   },
 
   /**
-   * Update a country response.
+   * Update a destination response.
    */
-  async updateCountryResponse(responseId: string, input: UpdateCountryResponseInput): Promise<CountryResponseFull> {
-    logger.debug({ responseId, input }, 'Updating country response');
+  async updateDestinationResponse(destinationId: string, input: UpdateDestinationResponseInput): Promise<DestinationResponseFull> {
+    logger.debug({ destinationId, input }, 'Updating destination response');
 
     // Check if response exists
     const [existing] = await db
       .select()
-      .from(countryResponses)
-      .where(eq(countryResponses.id, responseId))
+      .from(destinationResponses)
+      .where(eq(destinationResponses.id, destinationId))
       .limit(1);
 
     if (!existing) {
-      throw new NotFoundError('Country response');
+      throw new NotFoundError('Destination response');
     }
 
     // Build update data
@@ -634,80 +630,132 @@ export const reportsService = {
     };
 
     if (input.displayOrder !== undefined) updateData.displayOrder = input.displayOrder;
-    if (input.matchScore !== undefined) updateData.matchScore = input.matchScore;
-    if (input.visaType !== undefined) updateData.visaType = input.visaType;
-    if (input.matchReasons !== undefined) updateData.matchReasons = input.matchReasons;
-    if (input.personalizedContent !== undefined) updateData.personalizedContent = input.personalizedContent;
-    if (input.categoryOverrides !== undefined) updateData.categoryOverrides = input.categoryOverrides;
+
+    // Handle destination updates
+    if (input.destination) {
+      if (input.destination.name !== undefined) updateData.destinationName = input.destination.name;
+      if (input.destination.subtitle !== undefined) updateData.destinationSubtitle = input.destination.subtitle;
+      if (input.destination.image !== undefined) updateData.destinationImage = input.destination.image;
+      if (input.destination.badge !== undefined) updateData.destinationBadge = input.destination.badge;
+    }
+
+    // Handle match updates
+    if (input.match) {
+      if (input.match.score !== undefined) updateData.matchScore = input.match.score;
+      if (input.match.visaType !== undefined) updateData.visaType = input.match.visaType;
+      if (input.match.reasons !== undefined) updateData.matchReasons = input.match.reasons;
+    }
+
+    // Handle narrative and sections
+    if (input.narrative !== undefined) updateData.narrative = input.narrative;
+    if (input.sections !== undefined) {
+      // Process sections to ensure they all have IDs
+      const processedSections = input.sections.map((section, index) => ({
+        ...section,
+        id: section.id ?? randomUUID(),
+        position: section.position ?? index,
+      }));
+      updateData.sections = processedSections;
+    }
 
     // Update response
     await db
-      .update(countryResponses)
+      .update(destinationResponses)
       .set(updateData)
-      .where(eq(countryResponses.id, responseId));
+      .where(eq(destinationResponses.id, destinationId));
 
-    logger.info({ responseId }, 'Country response updated');
+    logger.info({ destinationId }, 'Destination response updated');
 
-    return this.getCountryResponseById(responseId);
+    return this.getDestinationResponseById(destinationId);
   },
 
   /**
-   * Publish or unpublish a country response.
+   * Publish or unpublish a destination response.
    */
-  async publishCountryResponse(responseId: string, publish: boolean = true): Promise<CountryResponseFull> {
-    logger.debug({ responseId, publish }, 'Publishing/unpublishing country response');
+  async publishDestinationResponse(destinationId: string, publish: boolean = true): Promise<DestinationResponseFull> {
+    logger.debug({ destinationId, publish }, 'Publishing/unpublishing destination response');
 
     // Check if response exists
     const [existing] = await db
       .select()
-      .from(countryResponses)
-      .where(eq(countryResponses.id, responseId))
+      .from(destinationResponses)
+      .where(eq(destinationResponses.id, destinationId))
       .limit(1);
 
     if (!existing) {
-      throw new NotFoundError('Country response');
+      throw new NotFoundError('Destination response');
     }
 
     const now = new Date();
 
     // Update status
     await db
-      .update(countryResponses)
+      .update(destinationResponses)
       .set({
         status: publish ? 'published' : 'draft',
         publishedAt: publish ? now : null,
         updatedAt: now,
       })
-      .where(eq(countryResponses.id, responseId));
+      .where(eq(destinationResponses.id, destinationId));
 
-    logger.info({ responseId, publish }, 'Country response publish status updated');
+    logger.info({ destinationId, publish }, 'Destination response publish status updated');
 
-    return this.getCountryResponseById(responseId);
+    // Send notification to user if publishing (not unpublishing) AND report is published
+    if (publish) {
+      try {
+        // Get the report to find the user ID and check if report is published
+        const [report] = await db
+          .select({
+            userId: questionnaireReports.userId,
+            status: questionnaireReports.status,
+          })
+          .from(questionnaireReports)
+          .where(eq(questionnaireReports.id, existing.reportId))
+          .limit(1);
+
+        // Only notify if the report itself is also published
+        if (report && report.status === 'published') {
+          await notificationsService.notifyCountryResponseReady(
+            report.userId,
+            existing.destinationName,
+            destinationId
+          );
+          logger.info({ destinationId, userId: report.userId }, 'User notified about destination response');
+        } else {
+          logger.debug({ destinationId, reportStatus: report?.status }, 'Skipping notification - report not published');
+        }
+      } catch (notifyError) {
+        // Don't fail the publish operation if notification fails
+        logger.error({ destinationId, error: notifyError }, 'Failed to send destination notification');
+      }
+    }
+
+    return this.getDestinationResponseById(destinationId);
   },
 
   /**
-   * Delete a country response.
+   * Delete a destination response.
    */
-  async deleteCountryResponse(responseId: string): Promise<void> {
-    logger.debug({ responseId }, 'Deleting country response');
+  async deleteDestinationResponse(destinationId: string): Promise<void> {
+    logger.debug({ destinationId }, 'Deleting destination response');
 
     // Check if response exists
     const [existing] = await db
-      .select({ id: countryResponses.id })
-      .from(countryResponses)
-      .where(eq(countryResponses.id, responseId))
+      .select({ id: destinationResponses.id })
+      .from(destinationResponses)
+      .where(eq(destinationResponses.id, destinationId))
       .limit(1);
 
     if (!existing) {
-      throw new NotFoundError('Country response');
+      throw new NotFoundError('Destination response');
     }
 
     // Delete response
     await db
-      .delete(countryResponses)
-      .where(eq(countryResponses.id, responseId));
+      .delete(destinationResponses)
+      .where(eq(destinationResponses.id, destinationId));
 
-    logger.info({ responseId }, 'Country response deleted');
+    logger.info({ destinationId }, 'Destination response deleted');
   },
 
   // ================== PUBLIC: User Report ==================
@@ -730,18 +778,18 @@ export const reportsService = {
       return {
         hasReport: false,
         hasPublishedReport: false,
-        publishedCountryCount: 0,
+        publishedDestinationCount: 0,
       };
     }
 
-    // Count published country responses
+    // Count published destination responses
     const [countResult] = await db
       .select({ count: count() })
-      .from(countryResponses)
+      .from(destinationResponses)
       .where(
         and(
-          eq(countryResponses.reportId, report.id),
-          eq(countryResponses.status, 'published')
+          eq(destinationResponses.reportId, report.id),
+          eq(destinationResponses.status, 'published')
         )
       );
 
@@ -752,13 +800,13 @@ export const reportsService = {
     return {
       hasReport: true,
       hasPublishedReport: report.status === 'published',
-      publishedCountryCount: publishedCount,
+      publishedDestinationCount: publishedCount,
       reportId: report.id,
     };
   },
 
   /**
-   * Get user's published report with all country responses.
+   * Get user's published report with all destination responses.
    */
   async getUserReport(userId: string): Promise<UserReport | null> {
     logger.debug({ userId }, 'Getting user report');
@@ -781,82 +829,44 @@ export const reportsService = {
       return null;
     }
 
-    // Get published country responses with country data
+    // Get published destination responses
     const responseRows = await db
-      .select({
-        response: countryResponses,
-        country: countries,
-      })
-      .from(countryResponses)
-      .leftJoin(countries, eq(countryResponses.countryId, countries.id))
+      .select()
+      .from(destinationResponses)
       .where(
         and(
-          eq(countryResponses.reportId, report.id),
-          eq(countryResponses.status, 'published')
+          eq(destinationResponses.reportId, report.id),
+          eq(destinationResponses.status, 'published')
         )
       )
-      .orderBy(asc(countryResponses.displayOrder));
+      .orderBy(asc(destinationResponses.displayOrder));
 
-    // Build user country responses with merged categories
-    const userCountryResponses: UserCountryResponse[] = responseRows.map(row => {
-      const country = row.country!;
-      const response = row.response;
-      const overrides = response.categoryOverrides as CategoryOverrides | null;
-      const staticCategories = country.categories as CountryCategories;
+    // Build user destination responses (self-contained, no merging needed)
+    const userDestinations: UserDestinationResponse[] = responseRows.map(row => ({
+      id: row.id,
+      displayOrder: row.displayOrder,
+      destination: toDestinationInfo(row),
+      match: toMatchInfo(row),
+      narrative: row.narrative as DestinationNarrative,
+      sections: row.sections as DestinationSection[],
+    }));
 
-      // Merge static categories with overrides (overrides take precedence)
-      const mergedCategories = {
-        general: overrides?.general ?? staticCategories?.general,
-        visa: overrides?.visa ?? staticCategories?.visa,
-        language: overrides?.language ?? staticCategories?.language,
-        safety: overrides?.safety ?? staticCategories?.safety,
-        jewish: overrides?.jewish ?? staticCategories?.jewish,
-        openness: overrides?.openness ?? staticCategories?.openness,
-        healthcare: overrides?.healthcare ?? staticCategories?.healthcare,
-        education: overrides?.education ?? staticCategories?.education,
-        employment: overrides?.employment ?? staticCategories?.employment,
-        transport: overrides?.transport ?? staticCategories?.transport,
-        cost: overrides?.cost ?? staticCategories?.cost,
-        distance: overrides?.distance ?? staticCategories?.distance,
-        community: overrides?.community ?? staticCategories?.community,
-      };
-
-      return {
-        id: response.id,
-        country: {
-          id: country.id,
-          code: country.code,
-          name: country.name,
-          englishName: country.englishName,
-          flagImage: country.flagImage,
-          heroImage: country.heroImage,
-          introduction: country.introduction,
-        },
-        displayOrder: response.displayOrder,
-        matchScore: response.matchScore,
-        visaType: response.visaType,
-        matchReasons: response.matchReasons as string[],
-        personalizedContent: response.personalizedContent as PersonalizedContent,
-        categories: mergedCategories,
-      };
-    });
-
-    logger.info({ userId, reportId: report.id, countryCount: userCountryResponses.length }, 'User report retrieved');
+    logger.info({ userId, reportId: report.id, destinationCount: userDestinations.length }, 'User report retrieved');
 
     return {
       id: report.id,
       greeting: report.greeting,
       profileSummary: report.profileSummary as ReportProfileSummary,
-      countryResponses: userCountryResponses,
+      destinations: userDestinations,
       publishedAt: report.publishedAt?.toISOString() ?? null,
     };
   },
 
   /**
-   * Get a specific country response for a user's published report.
+   * Get a specific destination response for a user's published report.
    */
-  async getUserCountryResponse(userId: string, countryId: string): Promise<UserCountryResponse | null> {
-    logger.debug({ userId, countryId }, 'Getting user country response');
+  async getUserDestinationResponse(userId: string, destinationId: string): Promise<UserDestinationResponse | null> {
+    logger.debug({ userId, destinationId }, 'Getting user destination response');
 
     // Get published report for user
     const [report] = await db
@@ -874,19 +884,15 @@ export const reportsService = {
       return null;
     }
 
-    // Get specific published country response
+    // Get specific published destination response
     const [row] = await db
-      .select({
-        response: countryResponses,
-        country: countries,
-      })
-      .from(countryResponses)
-      .leftJoin(countries, eq(countryResponses.countryId, countries.id))
+      .select()
+      .from(destinationResponses)
       .where(
         and(
-          eq(countryResponses.reportId, report.id),
-          eq(countryResponses.countryId, countryId),
-          eq(countryResponses.status, 'published')
+          eq(destinationResponses.reportId, report.id),
+          eq(destinationResponses.id, destinationId),
+          eq(destinationResponses.status, 'published')
         )
       )
       .limit(1);
@@ -895,47 +901,15 @@ export const reportsService = {
       return null;
     }
 
-    const country = row.country!;
-    const response = row.response;
-    const overrides = response.categoryOverrides as CategoryOverrides | null;
-    const staticCategories = country.categories as CountryCategories;
-
-    // Merge categories
-    const mergedCategories = {
-      general: overrides?.general ?? staticCategories?.general,
-      visa: overrides?.visa ?? staticCategories?.visa,
-      language: overrides?.language ?? staticCategories?.language,
-      safety: overrides?.safety ?? staticCategories?.safety,
-      jewish: overrides?.jewish ?? staticCategories?.jewish,
-      openness: overrides?.openness ?? staticCategories?.openness,
-      healthcare: overrides?.healthcare ?? staticCategories?.healthcare,
-      education: overrides?.education ?? staticCategories?.education,
-      employment: overrides?.employment ?? staticCategories?.employment,
-      transport: overrides?.transport ?? staticCategories?.transport,
-      cost: overrides?.cost ?? staticCategories?.cost,
-      distance: overrides?.distance ?? staticCategories?.distance,
-      community: overrides?.community ?? staticCategories?.community,
-    };
-
-    logger.info({ userId, countryId, responseId: response.id }, 'User country response retrieved');
+    logger.info({ userId, destinationId }, 'User destination response retrieved');
 
     return {
-      id: response.id,
-      country: {
-        id: country.id,
-        code: country.code,
-        name: country.name,
-        englishName: country.englishName,
-        flagImage: country.flagImage,
-        heroImage: country.heroImage,
-        introduction: country.introduction,
-      },
-      displayOrder: response.displayOrder,
-      matchScore: response.matchScore,
-      visaType: response.visaType,
-      matchReasons: response.matchReasons as string[],
-      personalizedContent: response.personalizedContent as PersonalizedContent,
-      categories: mergedCategories,
+      id: row.id,
+      displayOrder: row.displayOrder,
+      destination: toDestinationInfo(row),
+      match: toMatchInfo(row),
+      narrative: row.narrative as DestinationNarrative,
+      sections: row.sections as DestinationSection[],
     };
   },
 };

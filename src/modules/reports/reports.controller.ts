@@ -7,10 +7,10 @@ import type {
   CreateReportInput,
   UpdateReportInput,
   PublishReportInput,
-  CountryResponseIdParam,
-  CreateCountryResponseInput,
-  UpdateCountryResponseInput,
-  PublishCountryResponseInput,
+  DestinationResponseIdParam,
+  CreateDestinationResponseInput,
+  UpdateDestinationResponseInput,
+  PublishDestinationResponseInput,
 } from './reports.schema.js';
 
 const logger = createModuleLogger('reports-controller');
@@ -116,10 +116,10 @@ export const reportsController = {
    */
   async publishReport(req: Request<object, object, PublishReportInput>, res: Response): Promise<void> {
     const { reportId } = (req as Request & { validatedParams: ReportIdParam }).validatedParams;
-    const { publishCountries } = req.body ?? { publishCountries: true };
-    logger.debug({ reportId, publishCountries }, 'Publish report request');
+    const { publishDestinations } = req.body ?? { publishDestinations: true };
+    logger.debug({ reportId, publishDestinations }, 'Publish report request');
 
-    const report = await reportsService.publishReport(reportId, publishCountries);
+    const report = await reportsService.publishReport(reportId, publishDestinations);
 
     logger.info({ reportId }, 'Report published');
 
@@ -148,17 +148,17 @@ export const reportsController = {
     });
   },
 
-  // ================== ADMIN: Country Responses ==================
+  // ================== ADMIN: Destination Responses ==================
 
   /**
-   * GET /api/v1/admin/reports/responses/:responseId
-   * Get a country response by ID.
+   * GET /api/v1/admin/reports/destinations/:destinationId
+   * Get a destination response by ID.
    */
-  async getCountryResponseById(req: Request, res: Response): Promise<void> {
-    const { responseId } = (req as Request & { validatedParams: CountryResponseIdParam }).validatedParams;
-    logger.debug({ responseId }, 'Get country response by ID request');
+  async getDestinationResponseById(req: Request, res: Response): Promise<void> {
+    const { destinationId } = (req as Request & { validatedParams: DestinationResponseIdParam }).validatedParams;
+    logger.debug({ destinationId }, 'Get destination response by ID request');
 
-    const response = await reportsService.getCountryResponseById(responseId);
+    const response = await reportsService.getDestinationResponseById(destinationId);
 
     res.status(200).json({
       success: true,
@@ -167,78 +167,78 @@ export const reportsController = {
   },
 
   /**
-   * POST /api/v1/admin/reports/responses
-   * Create a new country response for a report.
+   * POST /api/v1/admin/reports/destinations
+   * Create a new destination response for a report.
    */
-  async createCountryResponse(req: Request<object, object, CreateCountryResponseInput>, res: Response): Promise<void> {
+  async createDestinationResponse(req: Request<object, object, CreateDestinationResponseInput>, res: Response): Promise<void> {
     const input = req.body;
-    logger.debug({ reportId: input.reportId, countryId: input.countryId }, 'Create country response request');
+    logger.debug({ reportId: input.reportId, destinationName: input.destination.name }, 'Create destination response request');
 
-    const response = await reportsService.createCountryResponse(input);
+    const response = await reportsService.createDestinationResponse(input);
 
-    logger.info({ responseId: response.id }, 'Country response created');
+    logger.info({ responseId: response.id }, 'Destination response created');
 
     res.status(201).json({
       success: true,
-      message: 'Country response created successfully',
+      message: 'Destination response created successfully',
       data: { response },
     });
   },
 
   /**
-   * PATCH /api/v1/admin/reports/responses/:responseId
-   * Update a country response.
+   * PATCH /api/v1/admin/reports/destinations/:destinationId
+   * Update a destination response.
    */
-  async updateCountryResponse(req: Request<object, object, UpdateCountryResponseInput>, res: Response): Promise<void> {
-    const { responseId } = (req as Request & { validatedParams: CountryResponseIdParam }).validatedParams;
-    logger.debug({ responseId, updates: req.body }, 'Update country response request');
+  async updateDestinationResponse(req: Request<object, object, UpdateDestinationResponseInput>, res: Response): Promise<void> {
+    const { destinationId } = (req as Request & { validatedParams: DestinationResponseIdParam }).validatedParams;
+    logger.debug({ destinationId, updates: req.body }, 'Update destination response request');
 
-    const response = await reportsService.updateCountryResponse(responseId, req.body);
+    const response = await reportsService.updateDestinationResponse(destinationId, req.body);
 
-    logger.info({ responseId }, 'Country response updated');
+    logger.info({ destinationId }, 'Destination response updated');
 
     res.status(200).json({
       success: true,
-      message: 'Country response updated successfully',
+      message: 'Destination response updated successfully',
       data: { response },
     });
   },
 
   /**
-   * POST /api/v1/admin/reports/responses/:responseId/publish
-   * Publish or unpublish a country response.
+   * POST /api/v1/admin/reports/destinations/:destinationId/publish
+   * Publish or unpublish a destination response.
    */
-  async publishCountryResponse(req: Request<object, object, PublishCountryResponseInput>, res: Response): Promise<void> {
-    const { responseId } = (req as Request & { validatedParams: CountryResponseIdParam }).validatedParams;
+  async publishDestinationResponse(req: Request<object, object, PublishDestinationResponseInput>, res: Response): Promise<void> {
+    const { destinationId } = (req as Request & { validatedParams: DestinationResponseIdParam }).validatedParams;
     const { publish } = req.body ?? { publish: true };
-    logger.debug({ responseId, publish }, 'Publish country response request');
+    logger.debug({ destinationId, publish }, 'Publish destination response request');
 
-    const response = await reportsService.publishCountryResponse(responseId, publish);
+    const response = await reportsService.publishDestinationResponse(destinationId, publish);
 
-    logger.info({ responseId, publish }, 'Country response publish status updated');
+    logger.info({ destinationId, publish }, 'Destination response publish status updated');
 
     res.status(200).json({
       success: true,
-      message: publish ? 'Country response published successfully' : 'Country response unpublished successfully',
+      message: publish ? 'Destination response published successfully' : 'Destination response unpublished successfully',
       data: { response },
     });
   },
 
   /**
-   * DELETE /api/v1/admin/reports/responses/:responseId
-   * Delete a country response.
+   * DELETE /api/v1/admin/reports/destinations/:destinationId
+   * Delete a destination response.
    */
-  async deleteCountryResponse(req: Request, res: Response): Promise<void> {
-    const { responseId } = (req as Request & { validatedParams: CountryResponseIdParam }).validatedParams;
-    logger.debug({ responseId }, 'Delete country response request');
+  async deleteDestinationResponse(req: Request, res: Response): Promise<void> {
+    const { destinationId } = (req as Request & { validatedParams: DestinationResponseIdParam }).validatedParams;
+    logger.debug({ destinationId }, 'Delete destination response request');
 
-    await reportsService.deleteCountryResponse(responseId);
+    await reportsService.deleteDestinationResponse(destinationId);
 
-    logger.info({ responseId }, 'Country response deleted');
+    logger.info({ destinationId }, 'Destination response deleted');
 
     res.status(200).json({
       success: true,
-      message: 'Country response deleted successfully',
+      message: 'Destination response deleted successfully',
     });
   },
 
@@ -286,20 +286,20 @@ export const reportsController = {
   },
 
   /**
-   * GET /api/v1/reports/countries/:countryId
-   * Get a specific country response from user's report.
+   * GET /api/v1/reports/destinations/:destinationId
+   * Get a specific destination response from user's report.
    */
-  async getUserCountryResponse(req: Request, res: Response): Promise<void> {
+  async getUserDestinationResponse(req: Request, res: Response): Promise<void> {
     const userId = req.user!.id;
-    const countryId = req.params.countryId as string;
-    logger.debug({ userId, countryId }, 'Get user country response request');
+    const destinationId = req.params.destinationId as string;
+    logger.debug({ userId, destinationId }, 'Get user destination response request');
 
-    const response = await reportsService.getUserCountryResponse(userId, countryId);
+    const response = await reportsService.getUserDestinationResponse(userId, destinationId);
 
     if (!response) {
       res.status(404).json({
         success: false,
-        error: 'Country response not found',
+        error: 'Destination response not found',
       });
       return;
     }

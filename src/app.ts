@@ -2,6 +2,7 @@ import express, { type Application, type Request, type Response, type NextFuncti
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import path from 'node:path';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { apiRouter } from './routes/index.js';
@@ -104,6 +105,13 @@ export function createApp(): Application {
 
     next();
   });
+
+  // ===========================================
+  // Static Files
+  // ===========================================
+
+  // Serve uploaded files from /uploads
+  app.use('/uploads', express.static(path.join(process.cwd(), 'public/uploads')));
 
   // ===========================================
   // API Routes

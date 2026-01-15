@@ -10,7 +10,6 @@ import {
 } from 'drizzle-orm/pg-core';
 import { userProfiles } from './users.js';
 import { questionnaireResponses } from './questionnaires.js';
-import { countries } from './countries.js';
 
 /**
  * Report status enum
@@ -35,44 +34,47 @@ export interface ReportProfileSummary {
 }
 
 /**
- * Type definitions for personalized content JSONB structure.
+ * Type definitions for destination narrative JSONB structure.
+ * This is the personalized story for why this destination fits the user.
  */
-export interface PersonalizedContent {
-  /** המסלול - Visa path description */
-  visaPath?: string;
-  /** איך אתם מתאימים - How user fits requirements */
-  howYouFit?: string;
-  /** למה זה נכון לכם - Why it's right for them */
-  whyRightForYou?: string;
-  /** יתרונות עבורכם - Advantages bullet list */
-  advantages?: string[];
+export interface DestinationNarrative {
+  /** Introduction - why this destination */
+  introduction?: string;
+  /** Pathway - how to get there (visa/permit route) */
+  pathway?: string;
+  /** Fit - how the user specifically matches */
+  fit?: string;
+  /** Benefits - what the user gains */
+  benefits?: string;
+  /** Highlights - bullet list of key points */
+  highlights?: string[];
 }
 
 /**
- * Type definitions for category overrides JSONB structure.
- * When set, these override the static country category content.
+ * Type definitions for flexible content sections.
+ * Each section represents a topic (visa, safety, education, etc.)
+ * with fully personalized content.
  */
-export interface CategoryOverrides {
-  general?: string;
-  visa?: string;
-  language?: string;
-  safety?: string;
-  jewish?: string;
-  openness?: string;
-  healthcare?: string;
-  education?: string;
-  employment?: string;
-  transport?: string;
-  cost?: string;
-  distance?: string;
-  community?: string;
+export interface DestinationSection {
+  /** Unique ID for the section */
+  id: string;
+  /** Key identifier (e.g., "visa", "safety", or custom) */
+  key: string;
+  /** Display title */
+  title: string;
+  /** Optional icon identifier */
+  icon?: string;
+  /** Markdown content */
+  content: string;
+  /** Display order */
+  position: number;
 }
 
 /**
  * Questionnaire reports table.
  *
  * Stores shared report data for a questionnaire submission.
- * Each report can have multiple country responses linked to it.
+ * Each report can have multiple destination responses linked to it.
  */
 export const questionnaireReports = pgTable('questionnaire_reports', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -107,13 +109,13 @@ export type QuestionnaireReport = typeof questionnaireReports.$inferSelect;
 export type NewQuestionnaireReport = typeof questionnaireReports.$inferInsert;
 
 /**
- * Country responses table.
+ * Destination responses table.
  *
- * Stores individual country recommendations within a report.
- * Each country response links to a static country and contains
- * personalized content written by admin.
+ * Stores individual destination recommendations within a report.
+ * Each destination response is fully self-contained with all
+ * personalized content - no foreign keys to master data.
  */
-export const countryResponses = pgTable('country_responses', {
+export const destinationResponses = pgTable('destination_responses', {
   id: uuid('id').primaryKey().defaultRandom(),
 
   // Link to parent report
@@ -121,29 +123,33 @@ export const countryResponses = pgTable('country_responses', {
     .references(() => questionnaireReports.id, { onDelete: 'cascade' })
     .notNull(),
 
-  // Link to static country data
-  countryId: uuid('country_id')
-    .references(() => countries.id, { onDelete: 'restrict' })
-    .notNull(),
-
   // Display order (1, 2, 3...)
   displayOrder: integer('display_order').notNull().default(1),
 
+  // Destination presentation (all personalized)
+  destinationName: varchar('destination_name', { length: 200 }).notNull(),
+  destinationSubtitle: varchar('destination_subtitle', { length: 200 }),
+  destinationImage: text('destination_image'), // URL
+  destinationBadge: varchar('destination_badge', { length: 100 }), // e.g., "מומלץ במיוחד"
+
   // Match information
   matchScore: integer('match_score').notNull().default(0), // 0-100
-  visaType: varchar('visa_type', { length: 200 }), // e.g., "נוודים דיגיטליים D8"
+  visaType: varchar('visa_type', { length: 200 }), // e.g., "ויזת נוודים דיגיטליים D8"
   matchReasons: jsonb('match_reasons').$type<string[]>().notNull().default([]),
 
-  // Personalized content (admin writes these)
-  personalizedContent: jsonb('personalized_content')
-    .$type<PersonalizedContent>()
+  // Narrative content (personalized story)
+  narrative: jsonb('narrative')
+    .$type<DestinationNarrative>()
     .notNull()
     .default({}),
 
-  // Optional category overrides (uses static country data if null)
-  categoryOverrides: jsonb('category_overrides').$type<CategoryOverrides>(),
+  // Flexible content sections
+  sections: jsonb('sections')
+    .$type<DestinationSection[]>()
+    .notNull()
+    .default([]),
 
-  // Status (can publish individual countries)
+  // Status (can publish individual destinations)
   status: reportStatusEnum('status').default('draft').notNull(),
 
   // Timestamps
@@ -153,5 +159,11 @@ export const countryResponses = pgTable('country_responses', {
 });
 
 // Type inference
-export type CountryResponse = typeof countryResponses.$inferSelect;
-export type NewCountryResponse = typeof countryResponses.$inferInsert;
+export type DestinationResponse = typeof destinationResponses.$inferSelect;
+export type NewDestinationResponse = typeof destinationResponses.$inferInsert;
+
+// Legacy type aliases for backwards compatibility during transition
+/** @deprecated Use DestinationResponse instead */
+export type CountryResponse = DestinationResponse;
+/** @deprecated Use NewDestinationResponse instead */
+export type NewCountryResponse = NewDestinationResponse;

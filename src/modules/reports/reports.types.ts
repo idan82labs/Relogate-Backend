@@ -1,8 +1,11 @@
 import type {
   ReportProfileSummary,
-  PersonalizedContent,
-  CategoryOverrides,
+  DestinationNarrative,
+  DestinationSection,
 } from '../../db/schema/reports.js';
+
+// Re-export schema types for convenience
+export type { ReportProfileSummary, DestinationNarrative, DestinationSection };
 
 /**
  * Report status type
@@ -10,19 +13,7 @@ import type {
 export type ReportStatus = 'draft' | 'published';
 
 /**
- * Simplified country info for response lists
- */
-export interface CountryInfo {
-  id: string;
-  code: string;
-  name: string;
-  englishName: string;
-  flagImage: string | null;
-}
-
-/**
  * User info for report lists
- * Note: email is from Supabase auth, may not always be available
  */
 export interface UserInfo {
   id: string;
@@ -31,31 +22,47 @@ export interface UserInfo {
 }
 
 /**
- * Country response in list view
+ * Destination presentation (inline, self-contained)
  */
-export interface CountryResponseListItem {
-  id: string;
-  country: CountryInfo;
-  displayOrder: number;
-  matchScore: number;
+export interface DestinationInfo {
+  name: string;
+  subtitle: string | null;
+  image: string | null;
+  badge: string | null;
+}
+
+/**
+ * Match data for a destination
+ */
+export interface MatchInfo {
+  score: number;
+  reasons: string[];
   visaType: string | null;
+}
+
+/**
+ * Destination response in list view (minimal)
+ */
+export interface DestinationResponseListItem {
+  id: string;
+  destination: DestinationInfo;
+  displayOrder: number;
+  match: MatchInfo;
   status: ReportStatus;
   publishedAt: string | null;
 }
 
 /**
- * Full country response with all details
+ * Full destination response with all details (admin view)
  */
-export interface CountryResponseFull {
+export interface DestinationResponseFull {
   id: string;
   reportId: string;
-  country: CountryInfo;
   displayOrder: number;
-  matchScore: number;
-  visaType: string | null;
-  matchReasons: string[];
-  personalizedContent: PersonalizedContent;
-  categoryOverrides: CategoryOverrides | null;
+  destination: DestinationInfo;
+  match: MatchInfo;
+  narrative: DestinationNarrative;
+  sections: DestinationSection[];
   status: ReportStatus;
   publishedAt: string | null;
   createdAt: string;
@@ -70,8 +77,8 @@ export interface ReportListItem {
   user: UserInfo;
   questionnaireId: string;
   status: ReportStatus;
-  countryResponseCount: number;
-  publishedCountryCount: number;
+  destinationCount: number;
+  publishedDestinationCount: number;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -87,7 +94,7 @@ export interface ReportFull {
   greeting: string | null;
   profileSummary: ReportProfileSummary;
   status: ReportStatus;
-  countryResponses: CountryResponseListItem[];
+  destinations: DestinationResponseListItem[];
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -131,41 +138,16 @@ export interface PendingQuestionnairesResponse {
 }
 
 /**
- * User-facing country response (public view)
- * Includes merged static + personalized content
+ * User-facing destination response (public view)
+ * Self-contained with all personalized content
  */
-export interface UserCountryResponse {
+export interface UserDestinationResponse {
   id: string;
-  country: {
-    id: string;
-    code: string;
-    name: string;
-    englishName: string;
-    flagImage: string | null;
-    heroImage: string | null;
-    introduction: string | null;
-  };
   displayOrder: number;
-  matchScore: number;
-  visaType: string | null;
-  matchReasons: string[];
-  personalizedContent: PersonalizedContent;
-  /** Merged categories (personalized overrides static) */
-  categories: {
-    general?: string;
-    visa?: string;
-    language?: string;
-    safety?: string;
-    jewish?: string;
-    openness?: string;
-    healthcare?: string;
-    education?: string;
-    employment?: string;
-    transport?: string;
-    cost?: string;
-    distance?: string;
-    community?: string;
-  };
+  destination: DestinationInfo;
+  match: MatchInfo;
+  narrative: DestinationNarrative;
+  sections: DestinationSection[];
 }
 
 /**
@@ -175,7 +157,7 @@ export interface UserReport {
   id: string;
   greeting: string | null;
   profileSummary: ReportProfileSummary;
-  countryResponses: UserCountryResponse[];
+  destinations: UserDestinationResponse[];
   publishedAt: string | null;
 }
 
@@ -185,6 +167,14 @@ export interface UserReport {
 export interface UserReportStatus {
   hasReport: boolean;
   hasPublishedReport: boolean;
-  publishedCountryCount: number;
+  publishedDestinationCount: number;
   reportId?: string;
 }
+
+// Legacy type aliases for backwards compatibility
+/** @deprecated Use DestinationResponseListItem instead */
+export type CountryResponseListItem = DestinationResponseListItem;
+/** @deprecated Use DestinationResponseFull instead */
+export type CountryResponseFull = DestinationResponseFull;
+/** @deprecated Use UserDestinationResponse instead */
+export type UserCountryResponse = UserDestinationResponse;

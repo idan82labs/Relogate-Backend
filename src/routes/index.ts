@@ -5,6 +5,7 @@ import { adminRouter } from '../modules/admin/index.js';
 import { countriesAdminRouter, countriesPublicRouter } from '../modules/countries/index.js';
 import { reportsAdminRouter, reportsPublicRouter } from '../modules/reports/index.js';
 import { notificationsUserRouter, notificationsAdminRouter } from '../modules/notifications/index.js';
+import { uploadRouter } from '../modules/upload/index.js';
 
 const router = Router();
 
@@ -49,5 +50,8 @@ router.use('/notifications', notificationsUserRouter);
 
 // Admin notifications routes: /api/v1/admin/notifications/*
 router.use('/admin/notifications', notificationsAdminRouter);
+
+// Upload routes: /api/v1/upload/*
+router.use('/upload', uploadRouter);
 
 export const apiRouter = router;

@@ -10,10 +10,10 @@ import {
   createReportSchema,
   updateReportSchema,
   publishReportSchema,
-  countryResponseIdParamSchema,
-  createCountryResponseSchema,
-  updateCountryResponseSchema,
-  publishCountryResponseSchema,
+  destinationResponseIdParamSchema,
+  createDestinationResponseSchema,
+  updateDestinationResponseSchema,
+  publishDestinationResponseSchema,
   type ListReportsQuery,
 } from './reports.schema.js';
 
@@ -103,63 +103,63 @@ adminRouter.delete(
   reportsController.deleteReport
 );
 
-// ================== Country Responses ==================
+// ================== Destination Responses ==================
 
 /**
- * @route   GET /api/v1/admin/reports/responses/:responseId
- * @desc    Get a country response by ID
+ * @route   GET /api/v1/admin/reports/destinations/:destinationId
+ * @desc    Get a destination response by ID
  * @access  Admin only
  */
 adminRouter.get(
-  '/responses/:responseId',
-  validateParams(countryResponseIdParamSchema),
-  reportsController.getCountryResponseById
+  '/destinations/:destinationId',
+  validateParams(destinationResponseIdParamSchema),
+  reportsController.getDestinationResponseById
 );
 
 /**
- * @route   POST /api/v1/admin/reports/responses
- * @desc    Create a new country response for a report
+ * @route   POST /api/v1/admin/reports/destinations
+ * @desc    Create a new destination response for a report
  * @access  Admin only
  */
 adminRouter.post(
-  '/responses',
-  validateRequest(createCountryResponseSchema),
-  reportsController.createCountryResponse
+  '/destinations',
+  validateRequest(createDestinationResponseSchema),
+  reportsController.createDestinationResponse
 );
 
 /**
- * @route   PATCH /api/v1/admin/reports/responses/:responseId
- * @desc    Update a country response
+ * @route   PATCH /api/v1/admin/reports/destinations/:destinationId
+ * @desc    Update a destination response
  * @access  Admin only
  */
 adminRouter.patch(
-  '/responses/:responseId',
-  validateParams(countryResponseIdParamSchema),
-  validateRequest(updateCountryResponseSchema),
-  reportsController.updateCountryResponse
+  '/destinations/:destinationId',
+  validateParams(destinationResponseIdParamSchema),
+  validateRequest(updateDestinationResponseSchema),
+  reportsController.updateDestinationResponse
 );
 
 /**
- * @route   POST /api/v1/admin/reports/responses/:responseId/publish
- * @desc    Publish or unpublish a country response
+ * @route   POST /api/v1/admin/reports/destinations/:destinationId/publish
+ * @desc    Publish or unpublish a destination response
  * @access  Admin only
  */
 adminRouter.post(
-  '/responses/:responseId/publish',
-  validateParams(countryResponseIdParamSchema),
-  validateRequest(publishCountryResponseSchema),
-  reportsController.publishCountryResponse
+  '/destinations/:destinationId/publish',
+  validateParams(destinationResponseIdParamSchema),
+  validateRequest(publishDestinationResponseSchema),
+  reportsController.publishDestinationResponse
 );
 
 /**
- * @route   DELETE /api/v1/admin/reports/responses/:responseId
- * @desc    Delete a country response
+ * @route   DELETE /api/v1/admin/reports/destinations/:destinationId
+ * @desc    Delete a destination response
  * @access  Admin only
  */
 adminRouter.delete(
-  '/responses/:responseId',
-  validateParams(countryResponseIdParamSchema),
-  reportsController.deleteCountryResponse
+  '/destinations/:destinationId',
+  validateParams(destinationResponseIdParamSchema),
+  reportsController.deleteDestinationResponse
 );
 
 /**
@@ -186,11 +186,11 @@ publicRouter.get('/status', reportsController.getUserReportStatus);
 publicRouter.get('/', reportsController.getUserReport);
 
 /**
- * @route   GET /api/v1/reports/countries/:countryId
- * @desc    Get a specific country response from user's report
+ * @route   GET /api/v1/reports/destinations/:destinationId
+ * @desc    Get a specific destination response from user's report
  * @access  Authenticated users
  */
-publicRouter.get('/countries/:countryId', reportsController.getUserCountryResponse);
+publicRouter.get('/destinations/:destinationId', reportsController.getUserDestinationResponse);
 
 export const reportsAdminRouter = adminRouter;
 export const reportsPublicRouter = publicRouter;
