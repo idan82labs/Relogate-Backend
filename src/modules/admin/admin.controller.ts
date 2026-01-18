@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import { adminService } from './admin.service.js';
 import { createModuleLogger } from '../../config/logger.js';
-import type { ListUsersQuery, CreateUserInput, UserIdParam } from './admin.schema.js';
+import type { ListUsersQuery, CreateUserInput, UserIdParam, BatchNotificationInput } from './admin.schema.js';
+import { questionnaireService } from '../questionnaire/questionnaire.service.js';
+import { notificationsService } from '../notifications/notifications.service.js';
 
 const logger = createModuleLogger('admin-controller');
 
@@ -119,6 +121,122 @@ export const adminController = {
     res.status(200).json({
       success: true,
       message: hardDelete ? 'User permanently deleted' : 'User deactivated',
+    });
+  },
+
+  // ================== Questionnaire Admin Endpoints ==================
+
+  /**
+   * GET /api/v1/admin/questionnaires/stats
+   * Get questionnaire statistics.
+   */
+  async getQuestionnaireStats(_req: Request, res: Response): Promise<void> {
+    logger.debug('Get questionnaire stats request');
+
+    const stats = await questionnaireService.getQuestionnaireStats();
+
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  },
+
+  /**
+   * GET /api/v1/admin/questionnaires/outdated
+   * Get list of users with outdated questionnaires.
+   */
+  async getOutdatedQuestionnaires(_req: Request, res: Response): Promise<void> {
+    logger.debug('Get outdated questionnaires request');
+
+    const outdated = await questionnaireService.getUsersWithOutdatedQuestionnaires();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        count: outdated.length,
+        questionnaires: outdated,
+      },
+    });
+  },
+
+  /**
+   * POST /api/v1/admin/questionnaire/notify-outdated
+   * Notify all users with outdated questionnaires.
+   */
+  async notifyOutdatedQuestionnaires(_req: Request, res: Response): Promise<void> {
+    logger.debug('Notify outdated questionnaires request');
+
+    // First mark all outdated questionnaires
+    const markedCount = await questionnaireService.markOutdatedQuestionnaires();
+
+    // Get users with outdated questionnaires
+    const outdated = await questionnaireService.getUsersWithOutdatedQuestionnaires();
+
+    // Send notifications to each user
+    let notifiedCount = 0;
+    for (const q of outdated) {
+      try {
+        await notificationsService.notifyQuestionnaireUpdated(q.userId);
+        notifiedCount++;
+      } catch (error) {
+        logger.error({ error, userId: q.userId }, 'Failed to notify user about outdated questionnaire');
+      }
+    }
+
+    logger.info({ markedCount, notifiedCount }, 'Outdated questionnaires notification completed');
+
+    res.status(200).json({
+      success: true,
+      message: 'Notifications sent to users with outdated questionnaires',
+      data: {
+        markedCount,
+        notifiedCount,
+      },
+    });
+  },
+
+  // ================== Notification Admin Endpoints ==================
+
+  /**
+   * POST /api/v1/admin/notifications/batch
+   * Send notifications to multiple users.
+   */
+  async sendBatchNotification(
+    req: Request<object, object, BatchNotificationInput>,
+    res: Response
+  ): Promise<void> {
+    const { userIds, type, title, message } = req.body;
+    logger.debug({ userIds: userIds.length, type }, 'Batch notification request');
+
+    let sentCount = 0;
+    const errors: Array<{ userId: string; error: string }> = [];
+
+    for (const userId of userIds) {
+      try {
+        await notificationsService.createNotification({
+          userId,
+          type,
+          title,
+          message,
+        });
+        sentCount++;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        errors.push({ userId, error: errorMessage });
+        logger.error({ error, userId }, 'Failed to send notification');
+      }
+    }
+
+    logger.info({ sentCount, errorCount: errors.length }, 'Batch notification completed');
+
+    res.status(200).json({
+      success: true,
+      message: `Notifications sent: ${sentCount}/${userIds.length}`,
+      data: {
+        sentCount,
+        totalCount: userIds.length,
+        errors: errors.length > 0 ? errors : undefined,
+      },
     });
   },
 };

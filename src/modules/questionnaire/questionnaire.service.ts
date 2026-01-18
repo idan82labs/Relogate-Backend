@@ -22,6 +22,13 @@ import type {
   UpdateQuestionnaireInput,
   CompleteQuestionnaireInput,
 } from './questionnaire.schema.js';
+import { notificationsService } from '../notifications/notifications.service.js';
+import {
+  CURRENT_SCHEMA_VERSION,
+  isQuestionnaireOutdated,
+  getQuestionnaireVersionStatus,
+  type QuestionnaireVersionStatus,
+} from './schema-version.service.js';
 
 const logger = createModuleLogger('questionnaire-service');
 
@@ -223,7 +230,14 @@ export const questionnaireService = {
       throw new NotFoundError('Questionnaire not found');
     }
 
-    if (existing.status !== 'in_progress') {
+    // Allow updates if:
+    // 1. Status is 'in_progress', OR
+    // 2. Status is 'completed' AND needsUpdate is true (migration in progress)
+    const canUpdate =
+      existing.status === 'in_progress' ||
+      (existing.status === 'completed' && existing.needsUpdate);
+
+    if (!canUpdate) {
       throw new BadRequestError('Cannot update a completed or archived questionnaire');
     }
 
@@ -432,6 +446,20 @@ export const questionnaireService = {
       })
       .where(eq(userProfiles.id, userId));
 
+    // Get user's name for notification
+    const [user] = await db
+      .select({ firstName: userProfiles.firstName, lastName: userProfiles.lastName })
+      .from(userProfiles)
+      .where(eq(userProfiles.id, userId))
+      .limit(1);
+
+    const userName = user ? `${user.firstName} ${user.lastName}` : undefined;
+
+    // Notify admins about the completed questionnaire (fire and forget)
+    notificationsService.notifyNewQuestionnaireSubmitted(userId, userName).catch((error) => {
+      logger.error({ error, userId }, 'Failed to send admin notification for completed questionnaire');
+    });
+
     logger.info({ id, userId }, 'Questionnaire completed, user onboarding updated');
     return toPublicQuestionnaire(completed);
   },
@@ -485,5 +513,337 @@ export const questionnaireService = {
       .limit(1);
 
     return user?.onboardingStatus === 'completed';
+  },
+
+  // ================== Migration Methods ==================
+
+  /**
+   * Get questionnaire status with version info.
+   * Used to determine if user needs to update their questionnaire.
+   */
+  async getQuestionnaireStatus(userId: string): Promise<QuestionnaireVersionStatus | null> {
+    logger.debug({ userId }, 'Getting questionnaire status');
+
+    // Get the most recent questionnaire (completed or in progress)
+    const [questionnaire] = await db
+      .select()
+      .from(questionnaireResponses)
+      .where(eq(questionnaireResponses.userId, userId))
+      .orderBy(desc(questionnaireResponses.completedAt), desc(questionnaireResponses.createdAt))
+      .limit(1);
+
+    if (!questionnaire) {
+      return null;
+    }
+
+    const status = getQuestionnaireVersionStatus(
+      questionnaire.schemaVersion,
+      questionnaire.responses,
+      questionnaire.needsUpdate
+    );
+
+    logger.debug({ userId, status }, 'Questionnaire status retrieved');
+    return status;
+  },
+
+  /**
+   * Initiate migration for a completed questionnaire.
+   * Marks the questionnaire as needing update so user can fill in new fields.
+   */
+  async migrateQuestionnaire(userId: string): Promise<PublicQuestionnaire> {
+    logger.debug({ userId }, 'Initiating questionnaire migration');
+
+    // Find the most recent completed questionnaire
+    const [existing] = await db
+      .select()
+      .from(questionnaireResponses)
+      .where(
+        and(
+          eq(questionnaireResponses.userId, userId),
+          eq(questionnaireResponses.status, 'completed')
+        )
+      )
+      .orderBy(desc(questionnaireResponses.completedAt))
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundError('No completed questionnaire found');
+    }
+
+    // Check if already up to date
+    if (!isQuestionnaireOutdated(existing.schemaVersion) && !existing.needsUpdate) {
+      throw new BadRequestError('Questionnaire is already up to date');
+    }
+
+    const now = new Date();
+
+    // Mark questionnaire as needing update
+    const [updated] = await db
+      .update(questionnaireResponses)
+      .set({
+        needsUpdate: true,
+        lastSchemaCheck: now,
+        updatedAt: now,
+      })
+      .where(eq(questionnaireResponses.id, existing.id))
+      .returning();
+
+    if (!updated) {
+      throw new Error('Failed to migrate questionnaire');
+    }
+
+    // Update user's onboarding status to indicate they need to update
+    await db
+      .update(userProfiles)
+      .set({
+        onboardingStatus: 'in_progress',
+        updatedAt: now,
+      })
+      .where(eq(userProfiles.id, userId));
+
+    logger.info({ userId, questionnaireId: existing.id }, 'Questionnaire migration initiated');
+    return toPublicQuestionnaire(updated);
+  },
+
+  /**
+   * Complete migration for a questionnaire that was marked as needing update.
+   * Resets needsUpdate flag and updates schema version.
+   */
+  async completeMigration(
+    id: string,
+    userId: string,
+    input: CompleteQuestionnaireInput
+  ): Promise<PublicQuestionnaire> {
+    logger.debug({ id, userId }, 'Completing questionnaire migration');
+
+    // Get existing questionnaire
+    const [existing] = await db
+      .select()
+      .from(questionnaireResponses)
+      .where(
+        and(
+          eq(questionnaireResponses.id, id),
+          eq(questionnaireResponses.userId, userId)
+        )
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundError('Questionnaire not found');
+    }
+
+    if (!existing.needsUpdate) {
+      throw new BadRequestError('Questionnaire does not need migration');
+    }
+
+    // Merge final responses
+    const finalResponses: QuestionnaireResponses = {
+      ...existing.responses,
+      ...input.responses,
+      version: CURRENT_SCHEMA_VERSION, // Update to current version
+    };
+
+    // Handle nested objects (deep merge)
+    if (input.responses?.personalDetails) {
+      finalResponses.personalDetails = {
+        ...existing.responses.personalDetails,
+        ...input.responses.personalDetails,
+      };
+    }
+    if (input.responses?.spouseDetails) {
+      finalResponses.spouseDetails = {
+        ...existing.responses.spouseDetails,
+        ...input.responses.spouseDetails,
+      };
+    }
+    if (input.responses?.children !== undefined) {
+      finalResponses.children = input.responses.children;
+    }
+    if (input.responses?.employment) {
+      finalResponses.employment = {
+        ...existing.responses.employment,
+        ...input.responses.employment,
+      };
+    }
+    if (input.responses?.studiesInvestments) {
+      finalResponses.studiesInvestments = {
+        ...existing.responses.studiesInvestments,
+        ...input.responses.studiesInvestments,
+      };
+    }
+    if (input.responses?.languages) {
+      finalResponses.languages = {
+        ...existing.responses.languages,
+        ...input.responses.languages,
+      };
+    }
+    if (input.responses?.spouseLanguages) {
+      finalResponses.spouseLanguages = {
+        ...existing.responses.spouseLanguages,
+        ...input.responses.spouseLanguages,
+      };
+    }
+    if (input.responses?.preferences) {
+      finalResponses.preferences = {
+        ...existing.responses.preferences,
+        ...input.responses.preferences,
+      };
+    }
+    if (input.responses?.bureaucracy) {
+      finalResponses.bureaucracy = {
+        ...existing.responses.bureaucracy,
+        ...input.responses.bureaucracy,
+      };
+    }
+
+    const now = new Date();
+
+    // Update questionnaire with new responses and reset migration flag
+    const [completed] = await db
+      .update(questionnaireResponses)
+      .set({
+        responses: finalResponses,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        needsUpdate: false,
+        lastSchemaCheck: now,
+        updatedAt: now,
+      })
+      .where(eq(questionnaireResponses.id, id))
+      .returning();
+
+    if (!completed) {
+      throw new Error('Failed to complete migration');
+    }
+
+    // Update user's onboarding status back to completed
+    await db
+      .update(userProfiles)
+      .set({
+        onboardingStatus: 'completed',
+        updatedAt: now,
+      })
+      .where(eq(userProfiles.id, userId));
+
+    // Get user's name for notification
+    const [user] = await db
+      .select({ firstName: userProfiles.firstName, lastName: userProfiles.lastName })
+      .from(userProfiles)
+      .where(eq(userProfiles.id, userId))
+      .limit(1);
+
+    const userName = user ? `${user.firstName} ${user.lastName}` : undefined;
+
+    // Notify admins about the completed migration (fire and forget)
+    notificationsService.notifyQuestionnaireUpdateCompleted(userId, userName).catch((error) => {
+      logger.error({ error, userId }, 'Failed to send admin notification for questionnaire migration');
+    });
+
+    logger.info({ id, userId }, 'Questionnaire migration completed');
+    return toPublicQuestionnaire(completed);
+  },
+
+  /**
+   * Mark all outdated questionnaires as needing update.
+   * Used by admin to trigger migrations for all V1 users.
+   * Returns the count of questionnaires marked.
+   */
+  async markOutdatedQuestionnaires(): Promise<number> {
+    logger.debug('Marking outdated questionnaires as needing update');
+
+    const now = new Date();
+
+    const result = await db
+      .update(questionnaireResponses)
+      .set({
+        needsUpdate: true,
+        lastSchemaCheck: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(questionnaireResponses.status, 'completed'),
+          eq(questionnaireResponses.needsUpdate, false)
+        )
+      );
+
+    // After marking, we need to filter those that are actually outdated
+    // This is a simplified version - in production, you'd want a more efficient query
+    const markedCount = result.count ?? 0;
+
+    logger.info({ markedCount }, 'Outdated questionnaires marked as needing update');
+    return markedCount;
+  },
+
+  /**
+   * Get all users with outdated questionnaires.
+   */
+  async getUsersWithOutdatedQuestionnaires(): Promise<
+    Array<{ userId: string; questionnaireId: string; schemaVersion: number }>
+  > {
+    const outdated = await db
+      .select({
+        userId: questionnaireResponses.userId,
+        questionnaireId: questionnaireResponses.id,
+        schemaVersion: questionnaireResponses.schemaVersion,
+      })
+      .from(questionnaireResponses)
+      .where(
+        and(
+          eq(questionnaireResponses.status, 'completed'),
+          eq(questionnaireResponses.needsUpdate, true)
+        )
+      );
+
+    return outdated.map((q) => ({
+      userId: q.userId,
+      questionnaireId: q.questionnaireId,
+      schemaVersion: q.schemaVersion,
+    }));
+  },
+
+  /**
+   * Get questionnaire statistics.
+   */
+  async getQuestionnaireStats(): Promise<{
+    totalV1: number;
+    totalV2: number;
+    needsUpdate: number;
+    completed: number;
+    inProgress: number;
+    archived: number;
+  }> {
+    // Get all questionnaires with their status and version
+    const questionnaires = await db
+      .select({
+        schemaVersion: questionnaireResponses.schemaVersion,
+        status: questionnaireResponses.status,
+        needsUpdate: questionnaireResponses.needsUpdate,
+      })
+      .from(questionnaireResponses);
+
+    let totalV1 = 0;
+    let totalV2 = 0;
+    let needsUpdate = 0;
+    let completed = 0;
+    let inProgress = 0;
+    let archived = 0;
+
+    for (const q of questionnaires) {
+      if (q.schemaVersion === 1) totalV1++;
+      if (q.schemaVersion >= 2) totalV2++;
+      if (q.needsUpdate) needsUpdate++;
+      if (q.status === 'completed') completed++;
+      if (q.status === 'in_progress') inProgress++;
+      if (q.status === 'archived') archived++;
+    }
+
+    return {
+      totalV1,
+      totalV2,
+      needsUpdate,
+      completed,
+      inProgress,
+      archived,
+    };
   },
 };

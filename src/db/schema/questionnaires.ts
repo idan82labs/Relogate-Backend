@@ -6,6 +6,7 @@ import {
   timestamp,
   jsonb,
   pgEnum,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { userProfiles } from './users.js';
 
@@ -329,6 +330,10 @@ export const questionnaireResponses = pgTable('questionnaire_responses', {
   // Status tracking
   status: questionnaireStatusEnum('status').default('in_progress').notNull(),
   currentStep: varchar('current_step', { length: 50 }).default('countries').notNull(),
+
+  // Schema migration tracking
+  needsUpdate: boolean('needs_update').default(false).notNull(),
+  lastSchemaCheck: timestamp('last_schema_check', { mode: 'date' }),
 
   // Timestamps
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),

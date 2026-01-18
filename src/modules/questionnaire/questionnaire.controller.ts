@@ -193,4 +193,69 @@ export const questionnaireController = {
       },
     });
   },
+
+  // ================== Migration Endpoints ==================
+
+  /**
+   * GET /api/v1/questionnaire/version-status
+   * Get questionnaire version status including migration info.
+   */
+  async getVersionStatus(req: Request, res: Response): Promise<void> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+
+    const status = await questionnaireService.getQuestionnaireStatus(userId);
+
+    res.status(200).json({
+      success: true,
+      data: status,
+    });
+  },
+
+  /**
+   * POST /api/v1/questionnaire/migrate
+   * Initiate migration for a completed questionnaire.
+   */
+  async migrate(req: Request, res: Response): Promise<void> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+
+    const questionnaire = await questionnaireService.migrateQuestionnaire(userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Questionnaire migration initiated',
+      data: { questionnaire },
+    });
+  },
+
+  /**
+   * POST /api/v1/questionnaire/:id/complete-migration
+   * Complete migration for a questionnaire.
+   */
+  async completeMigration(
+    req: Request<{ id: string }, object, CompleteQuestionnaireInput>,
+    res: Response
+  ): Promise<void> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+
+    const questionnaire = await questionnaireService.completeMigration(
+      req.params.id,
+      userId,
+      req.body
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Questionnaire migration completed',
+      data: { questionnaire },
+    });
+  },
 };

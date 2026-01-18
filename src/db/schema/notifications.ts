@@ -11,11 +11,42 @@ import { userProfiles } from './users.js';
 
 /**
  * Notification type enum
+ *
+ * Types:
+ * - Report-related (user-facing):
+ *   - report_ready: Full report is ready
+ *   - country_response_ready: A specific country response is ready
+ *
+ * - Questionnaire V1 (legacy):
+ *   - questionnaire_completed: Admin notification when user completes questionnaire
+ *
+ * - Questionnaire V2 (user-facing):
+ *   - questionnaire_updated: Schema updated, user should review
+ *   - questionnaire_resubmit_required: User must resubmit due to major changes
+ *   - questionnaire_reminder: Reminder to complete questionnaire
+ *
+ * - Questionnaire V2 (admin-facing):
+ *   - new_questionnaire_submitted: Admin notification for new questionnaire
+ *   - questionnaire_update_completed: Admin notification when user completes update
+ *
+ * - System:
+ *   - system: General system notifications
  */
 export const notificationTypeEnum = pgEnum('notification_type', [
-  'country_response_ready', // User: A country response has been published
-  'report_ready', // User: Full report is ready (all countries published)
-  'questionnaire_completed', // Admin: User completed a questionnaire
+  // Report-related (user-facing)
+  'report_ready',
+  'country_response_ready',
+  // Questionnaire - existing
+  'questionnaire_completed',
+  // Questionnaire V2 - user-facing
+  'questionnaire_updated',
+  'questionnaire_resubmit_required',
+  'questionnaire_reminder',
+  // Questionnaire V2 - admin-facing
+  'new_questionnaire_submitted',
+  'questionnaire_update_completed',
+  // System
+  'system',
 ]);
 
 /**

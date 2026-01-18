@@ -22,6 +22,20 @@ router.use(authenticate);
 router.get('/status', questionnaireController.getOnboardingStatus);
 
 /**
+ * @route   GET /api/v1/questionnaire/version-status
+ * @desc    Get questionnaire version status including migration info
+ * @access  Private
+ */
+router.get('/version-status', questionnaireController.getVersionStatus);
+
+/**
+ * @route   POST /api/v1/questionnaire/migrate
+ * @desc    Initiate migration for a completed questionnaire
+ * @access  Private
+ */
+router.post('/migrate', questionnaireController.migrate);
+
+/**
  * @route   GET /api/v1/questionnaire/completed
  * @desc    Get most recent completed questionnaire with results
  * @access  Private
@@ -97,6 +111,18 @@ router.delete(
   '/:id',
   validateParams(questionnaireIdParamSchema),
   questionnaireController.archive
+);
+
+/**
+ * @route   POST /api/v1/questionnaire/:id/complete-migration
+ * @desc    Complete migration for a questionnaire
+ * @access  Private
+ */
+router.post(
+  '/:id/complete-migration',
+  validateParams(questionnaireIdParamSchema),
+  validateRequest(completeQuestionnaireSchema),
+  questionnaireController.completeMigration
 );
 
 export const questionnaireRouter = router;

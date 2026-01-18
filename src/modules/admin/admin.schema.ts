@@ -117,8 +117,37 @@ export const updateUserSchema = z.object({
   role: roleSchema.optional(),
 });
 
+/**
+ * Batch notification schema (admin).
+ */
+export const batchNotificationSchema = z.object({
+  userIds: z.array(z.string().uuid('Invalid user ID')).min(1, 'At least one user ID is required'),
+  type: z.enum([
+    'report_ready',
+    'country_response_ready',
+    'questionnaire_completed',
+    'questionnaire_updated',
+    'questionnaire_resubmit_required',
+    'questionnaire_reminder',
+    'new_questionnaire_submitted',
+    'questionnaire_update_completed',
+    'system',
+  ]),
+  title: z
+    .string()
+    .min(1, 'Title is required')
+    .max(200, 'Title must not exceed 200 characters')
+    .trim(),
+  message: z
+    .string()
+    .min(1, 'Message is required')
+    .max(1000, 'Message must not exceed 1000 characters')
+    .trim(),
+});
+
 // Infer TypeScript types from schemas
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type UserIdParam = z.infer<typeof userIdParamSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type BatchNotificationInput = z.infer<typeof batchNotificationSchema>;

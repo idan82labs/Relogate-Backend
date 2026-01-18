@@ -14,6 +14,7 @@ export interface PublicQuestionnaire {
   responses: QuestionnaireResponses;
   status: 'in_progress' | 'completed' | 'archived';
   currentStep: string;
+  needsUpdate: boolean;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -41,6 +42,7 @@ export function toPublicQuestionnaire(q: QuestionnaireResponse): PublicQuestionn
     responses: q.responses,
     status: q.status,
     currentStep: q.currentStep,
+    needsUpdate: q.needsUpdate,
     createdAt: q.createdAt.toISOString(),
     updatedAt: q.updatedAt.toISOString(),
     completedAt: q.completedAt?.toISOString() ?? null,

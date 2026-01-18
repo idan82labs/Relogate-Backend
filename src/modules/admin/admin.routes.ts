@@ -9,6 +9,7 @@ import {
   userIdParamSchema,
   createUserSchema,
   updateUserSchema,
+  batchNotificationSchema,
   type ListUsersQuery,
 } from './admin.schema.js';
 
@@ -71,6 +72,42 @@ router.delete(
   '/users/:userId',
   validateParams(userIdParamSchema),
   adminController.deleteUser
+);
+
+// ================== Questionnaire Admin Endpoints ==================
+
+/**
+ * @route   GET /api/v1/admin/questionnaires/stats
+ * @desc    Get questionnaire statistics
+ * @access  Admin only
+ */
+router.get('/questionnaires/stats', adminController.getQuestionnaireStats);
+
+/**
+ * @route   GET /api/v1/admin/questionnaires/outdated
+ * @desc    Get list of users with outdated questionnaires
+ * @access  Admin only
+ */
+router.get('/questionnaires/outdated', adminController.getOutdatedQuestionnaires);
+
+/**
+ * @route   POST /api/v1/admin/questionnaires/notify-outdated
+ * @desc    Notify all users with outdated questionnaires
+ * @access  Admin only
+ */
+router.post('/questionnaires/notify-outdated', adminController.notifyOutdatedQuestionnaires);
+
+// ================== Notification Admin Endpoints ==================
+
+/**
+ * @route   POST /api/v1/admin/notifications/batch
+ * @desc    Send notifications to multiple users
+ * @access  Admin only
+ */
+router.post(
+  '/notifications/batch',
+  validateRequest(batchNotificationSchema),
+  adminController.sendBatchNotification
 );
 
 export const adminRouter = router;
