@@ -50,28 +50,28 @@ export function toPublicQuestionnaire(q: QuestionnaireResponse): PublicQuestionn
 }
 
 /**
- * Valid step names for questionnaire (V2).
- * Steps:
- * 1. intro - Explanation about the questionnaire
- * 2. personal-details - Personal information, family, children
- * 3. migration-goals - Reasons for relocation (multi-select)
- * 4. citizenship - User and spouse citizenships
- * 5. education-employment - Employment status, education, income
- * 6. studies-investments - Studies abroad, property investment
- * 7. languages - Speaking and writing languages
- * 8. preferences - Location, weather, community preferences
- * 9. bureaucracy - Visa history, criminal record
+ * Valid step names for questionnaire.
+ * Includes both current frontend step IDs and legacy step names for backward compatibility.
  */
 export const VALID_STEPS = [
+  // Current frontend V2 step IDs
   'intro',
   'personal-details',
-  'migration-goals',
+  'family-status',
+  'relocation-goals',
   'citizenship',
+  'employment-education',
+  'income',
+  'partner-details',
+  'studies-investments-languages',
+  'preferences',
+  // Legacy step names (V1 / old V2 - kept for backward compatibility)
+  'migration-goals',
   'education-employment',
   'studies-investments',
   'languages',
-  'preferences',
   'bureaucracy',
+  'countries',
 ] as const;
 
 export type StepName = (typeof VALID_STEPS)[number];
