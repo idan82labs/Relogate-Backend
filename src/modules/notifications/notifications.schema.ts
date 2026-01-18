@@ -1,12 +1,31 @@
 import { z } from 'zod';
 
 /**
- * Notification type enum for validation
+ * Notification type enum for validation.
+ * Must match the notification_type enum in the database.
+ *
+ * Categories:
+ * - Report-related: report_ready, country_response_ready
+ * - Questionnaire (legacy): questionnaire_completed
+ * - Questionnaire V2 (user-facing): questionnaire_updated, questionnaire_resubmit_required, questionnaire_reminder
+ * - Questionnaire V2 (admin-facing): new_questionnaire_submitted, questionnaire_update_completed
+ * - System: system
  */
 export const notificationTypeSchema = z.enum([
-  'country_response_ready',
+  // Report-related (user-facing)
   'report_ready',
+  'country_response_ready',
+  // Questionnaire - existing
   'questionnaire_completed',
+  // Questionnaire V2 - user-facing
+  'questionnaire_updated',
+  'questionnaire_resubmit_required',
+  'questionnaire_reminder',
+  // Questionnaire V2 - admin-facing
+  'new_questionnaire_submitted',
+  'questionnaire_update_completed',
+  // System
+  'system',
 ]);
 
 export type NotificationType = z.infer<typeof notificationTypeSchema>;

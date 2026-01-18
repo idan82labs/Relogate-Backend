@@ -267,6 +267,7 @@ export const notificationsService = {
 
   /**
    * Notify admin that a user completed a questionnaire.
+   * @deprecated Use notifyNewQuestionnaireSubmitted instead
    */
   async notifyQuestionnaireCompleted(adminUserId: string, userName: string, questionnaireId: string): Promise<void> {
     await this.createNotification({
@@ -276,5 +277,174 @@ export const notificationsService = {
       message: `המשתמש ${userName} סיים למלא את השאלון ומחכה לתגובה.`,
       relatedId: questionnaireId,
     });
+  },
+
+  // ================== Questionnaire V2 Notifications ==================
+
+  /**
+   * Hebrew notification content for V2 questionnaire notifications.
+   */
+  NOTIFICATION_CONTENT: {
+    questionnaire_updated: {
+      title: 'עדכון בשאלון',
+      message: 'השאלון עודכן. אנא בדוק את הפרטים שלך.',
+    },
+    questionnaire_resubmit_required: {
+      title: 'נדרש מילוי שאלון מחדש',
+      message: 'בוצעו שינויים משמעותיים בשאלון. אנא מלא את השאלון מחדש.',
+    },
+    questionnaire_reminder: {
+      title: 'תזכורת: השלם את השאלון',
+      message: 'השאלון שלך עדיין לא הושלם. השלם אותו כדי לקבל את הדוח שלך.',
+    },
+    new_questionnaire_submitted: {
+      title: 'שאלון חדש התקבל',
+      message: 'משתמש חדש השלים את השאלון.',
+    },
+    questionnaire_update_completed: {
+      title: 'משתמש עדכן שאלון',
+      message: 'משתמש השלים את עדכון השאלון.',
+    },
+  } as const,
+
+  /**
+   * Get all admin user IDs.
+   */
+  async getAdminUserIds(): Promise<string[]> {
+    const admins = await db
+      .select({ id: userProfiles.id })
+      .from(userProfiles)
+      .where(eq(userProfiles.role, 'admin'));
+
+    return admins.map((admin) => admin.id);
+  },
+
+  /**
+   * Notify user that their questionnaire schema has been updated.
+   * User should review their responses but doesn't need to resubmit.
+   */
+  async notifyQuestionnaireUpdated(userId: string, customMessage?: string): Promise<void> {
+    const content = this.NOTIFICATION_CONTENT.questionnaire_updated;
+    await this.createNotification({
+      userId,
+      type: 'questionnaire_updated',
+      title: content.title,
+      message: customMessage ?? content.message,
+    });
+
+    logger.info({ userId }, 'Sent questionnaire updated notification');
+  },
+
+  /**
+   * Notify user that they need to resubmit their questionnaire.
+   * Used when major schema changes require new data.
+   */
+  async notifyQuestionnaireResubmitRequired(userId: string): Promise<void> {
+    const content = this.NOTIFICATION_CONTENT.questionnaire_resubmit_required;
+    await this.createNotification({
+      userId,
+      type: 'questionnaire_resubmit_required',
+      title: content.title,
+      message: content.message,
+    });
+
+    logger.info({ userId }, 'Sent questionnaire resubmit required notification');
+  },
+
+  /**
+   * Send reminder to user to complete their questionnaire.
+   */
+  async notifyQuestionnaireReminder(userId: string): Promise<void> {
+    const content = this.NOTIFICATION_CONTENT.questionnaire_reminder;
+    await this.createNotification({
+      userId,
+      type: 'questionnaire_reminder',
+      title: content.title,
+      message: content.message,
+    });
+
+    logger.info({ userId }, 'Sent questionnaire reminder notification');
+  },
+
+  /**
+   * Notify all admins that a new questionnaire has been submitted.
+   * @param relatedUserId - The ID of the user who submitted the questionnaire
+   * @param userName - Optional user name for the notification message
+   */
+  async notifyNewQuestionnaireSubmitted(relatedUserId: string, userName?: string): Promise<void> {
+    const adminIds = await this.getAdminUserIds();
+
+    if (adminIds.length === 0) {
+      logger.warn('No admin users found to notify about new questionnaire');
+      return;
+    }
+
+    const content = this.NOTIFICATION_CONTENT.new_questionnaire_submitted;
+    const message = userName
+      ? `${userName} השלים/ה את השאלון.`
+      : content.message;
+
+    // Create notifications for all admins in parallel
+    await Promise.all(
+      adminIds.map((adminId) =>
+        this.createNotification({
+          userId: adminId,
+          type: 'new_questionnaire_submitted',
+          title: content.title,
+          message,
+          relatedId: relatedUserId,
+        })
+      )
+    );
+
+    logger.info({ relatedUserId, adminCount: adminIds.length }, 'Notified admins about new questionnaire');
+  },
+
+  /**
+   * Notify all admins that a user has completed their questionnaire update.
+   * @param relatedUserId - The ID of the user who completed the update
+   * @param userName - Optional user name for the notification message
+   */
+  async notifyQuestionnaireUpdateCompleted(relatedUserId: string, userName?: string): Promise<void> {
+    const adminIds = await this.getAdminUserIds();
+
+    if (adminIds.length === 0) {
+      logger.warn('No admin users found to notify about questionnaire update');
+      return;
+    }
+
+    const content = this.NOTIFICATION_CONTENT.questionnaire_update_completed;
+    const message = userName
+      ? `${userName} השלים/ה את עדכון השאלון.`
+      : content.message;
+
+    // Create notifications for all admins in parallel
+    await Promise.all(
+      adminIds.map((adminId) =>
+        this.createNotification({
+          userId: adminId,
+          type: 'questionnaire_update_completed',
+          title: content.title,
+          message,
+          relatedId: relatedUserId,
+        })
+      )
+    );
+
+    logger.info({ relatedUserId, adminCount: adminIds.length }, 'Notified admins about questionnaire update completion');
+  },
+
+  /**
+   * Send a system notification to a user.
+   */
+  async notifySystem(userId: string, title: string, message: string): Promise<void> {
+    await this.createNotification({
+      userId,
+      type: 'system',
+      title,
+      message,
+    });
+
+    logger.info({ userId }, 'Sent system notification');
   },
 };
