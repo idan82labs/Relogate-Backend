@@ -59,10 +59,10 @@ export const questionnaireService = {
       .insert(questionnaireResponses)
       .values({
         userId,
-        schemaVersion: 1,
-        responses: { version: 1, preferredCountries: [] },
+        schemaVersion: 2,
+        responses: { version: 2 },
         status: 'in_progress',
-        currentStep: 'countries',
+        currentStep: 'intro',
       })
       .returning();
 
@@ -98,10 +98,10 @@ export const questionnaireService = {
       .insert(questionnaireResponses)
       .values({
         userId,
-        schemaVersion: 1,
-        responses: input.responses ?? { version: 1, preferredCountries: [] },
+        schemaVersion: 2,
+        responses: input.responses ?? { version: 2 },
         status: 'in_progress',
-        currentStep: 'countries',
+        currentStep: 'intro',
       })
       .returning();
 
@@ -234,7 +234,7 @@ export const questionnaireService = {
       version: existing.responses.version, // Keep original version
     };
 
-    // Handle nested objects properly
+    // Handle nested objects properly (deep merge)
     if (input.responses?.personalDetails) {
       updatedResponses.personalDetails = {
         ...existing.responses.personalDetails,
@@ -245,6 +245,46 @@ export const questionnaireService = {
       updatedResponses.spouseDetails = {
         ...existing.responses.spouseDetails,
         ...input.responses.spouseDetails,
+      };
+    }
+    // Children array: replace instead of merge
+    if (input.responses?.children !== undefined) {
+      updatedResponses.children = input.responses.children;
+    }
+    if (input.responses?.employment) {
+      updatedResponses.employment = {
+        ...existing.responses.employment,
+        ...input.responses.employment,
+      };
+    }
+    if (input.responses?.studiesInvestments) {
+      updatedResponses.studiesInvestments = {
+        ...existing.responses.studiesInvestments,
+        ...input.responses.studiesInvestments,
+      };
+    }
+    if (input.responses?.languages) {
+      updatedResponses.languages = {
+        ...existing.responses.languages,
+        ...input.responses.languages,
+      };
+    }
+    if (input.responses?.spouseLanguages) {
+      updatedResponses.spouseLanguages = {
+        ...existing.responses.spouseLanguages,
+        ...input.responses.spouseLanguages,
+      };
+    }
+    if (input.responses?.preferences) {
+      updatedResponses.preferences = {
+        ...existing.responses.preferences,
+        ...input.responses.preferences,
+      };
+    }
+    if (input.responses?.bureaucracy) {
+      updatedResponses.bureaucracy = {
+        ...existing.responses.bureaucracy,
+        ...input.responses.bureaucracy,
       };
     }
 
@@ -308,7 +348,7 @@ export const questionnaireService = {
       version: existing.responses.version,
     };
 
-    // Handle nested objects
+    // Handle nested objects (deep merge)
     if (input.responses?.personalDetails) {
       finalResponses.personalDetails = {
         ...existing.responses.personalDetails,
@@ -321,6 +361,46 @@ export const questionnaireService = {
         ...input.responses.spouseDetails,
       };
     }
+    // Children array: replace instead of merge
+    if (input.responses?.children !== undefined) {
+      finalResponses.children = input.responses.children;
+    }
+    if (input.responses?.employment) {
+      finalResponses.employment = {
+        ...existing.responses.employment,
+        ...input.responses.employment,
+      };
+    }
+    if (input.responses?.studiesInvestments) {
+      finalResponses.studiesInvestments = {
+        ...existing.responses.studiesInvestments,
+        ...input.responses.studiesInvestments,
+      };
+    }
+    if (input.responses?.languages) {
+      finalResponses.languages = {
+        ...existing.responses.languages,
+        ...input.responses.languages,
+      };
+    }
+    if (input.responses?.spouseLanguages) {
+      finalResponses.spouseLanguages = {
+        ...existing.responses.spouseLanguages,
+        ...input.responses.spouseLanguages,
+      };
+    }
+    if (input.responses?.preferences) {
+      finalResponses.preferences = {
+        ...existing.responses.preferences,
+        ...input.responses.preferences,
+      };
+    }
+    if (input.responses?.bureaucracy) {
+      finalResponses.bureaucracy = {
+        ...existing.responses.bureaucracy,
+        ...input.responses.bureaucracy,
+      };
+    }
 
     const now = new Date();
 
@@ -330,7 +410,7 @@ export const questionnaireService = {
       .set({
         responses: finalResponses,
         status: 'completed',
-        currentStep: 'personal-details',
+        currentStep: 'bureaucracy',
         updatedAt: now,
         completedAt: now,
       })
