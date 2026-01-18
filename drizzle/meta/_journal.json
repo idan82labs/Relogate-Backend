@@ -8,6 +8,13 @@
       "when": 1768404041478,
       "tag": "0000_true_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1768750860853,
+      "tag": "0001_overconfident_raider",
+      "breakpoints": true
     }
   ]
 }
