@@ -6,6 +6,7 @@ import { countriesAdminRouter, countriesPublicRouter } from '../modules/countrie
 import { reportsAdminRouter, reportsPublicRouter } from '../modules/reports/index.js';
 import { notificationsUserRouter, notificationsAdminRouter } from '../modules/notifications/index.js';
 import { uploadRouter } from '../modules/upload/index.js';
+import { blogPublicRouter, pressPublicRouter, blogAdminRouter } from '../modules/blog/index.js';
 
 const router = Router();
 
@@ -53,5 +54,14 @@ router.use('/admin/notifications', notificationsAdminRouter);
 
 // Upload routes: /api/v1/upload/*
 router.use('/upload', uploadRouter);
+
+// Blog routes: /api/v1/blog/* (public)
+router.use('/blog', blogPublicRouter);
+
+// Press routes: /api/v1/press/* (public)
+router.use('/press', pressPublicRouter);
+
+// Admin blog routes: /api/v1/admin/blog/*
+router.use('/admin/blog', blogAdminRouter);
 
 export const apiRouter = router;

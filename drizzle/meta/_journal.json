@@ -15,6 +15,13 @@
       "when": 1768750860853,
       "tag": "0001_overconfident_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1768832104714,
+      "tag": "0002_loud_tiger_shark",
+      "breakpoints": true
     }
   ]
 }
