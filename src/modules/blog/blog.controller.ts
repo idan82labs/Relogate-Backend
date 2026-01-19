@@ -8,7 +8,11 @@ import type {
   BlogIdParam,
   CreateBlogPostInput,
   UpdateBlogPostInput,
+  TotalPagesQuery,
+  AllSlugsQuery,
+  RelatedPostsQuery,
 } from './blog.schema.js';
+import type { BlogContentType } from './blog.types.js';
 
 const logger = createModuleLogger('blog-controller');
 
@@ -106,6 +110,89 @@ export const blogController = {
     res.status(200).json({
       success: true,
       data: post,
+    });
+  },
+
+  // ================== PUBLIC: Utility Endpoints ==================
+
+  /**
+   * GET /api/v1/blog/pages
+   * Get total pages count for pagination.
+   */
+  async getTotalPages(req: Request, res: Response): Promise<void> {
+    const query = (req as Request & { validatedQuery: TotalPagesQuery })
+      .validatedQuery;
+    logger.debug({ query }, 'Get total pages request');
+
+    const result = await blogService.getTotalPages(
+      query.contentType as BlogContentType,
+      query.limit
+    );
+
+    res.setHeader('Cache-Control', PUBLIC_CACHE_HEADER);
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  },
+
+  /**
+   * GET /api/v1/blog/slugs
+   * Get all slugs for static generation.
+   */
+  async getAllSlugs(req: Request, res: Response): Promise<void> {
+    const query = (req as Request & { validatedQuery: AllSlugsQuery })
+      .validatedQuery;
+    logger.debug({ query }, 'Get all slugs request');
+
+    const result = await blogService.getAllSlugs(
+      query.contentType as BlogContentType | undefined
+    );
+
+    res.setHeader('Cache-Control', PUBLIC_CACHE_HEADER);
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  },
+
+  /**
+   * GET /api/v1/blog/:slug/related
+   * Get related posts for an article.
+   */
+  async getRelatedPosts(req: Request, res: Response): Promise<void> {
+    const { slug } = (req as Request & { validatedParams: BlogSlugParam })
+      .validatedParams;
+    const query = (req as Request & { validatedQuery: RelatedPostsQuery })
+      .validatedQuery;
+    logger.debug({ slug, query }, 'Get related posts request');
+
+    const posts = await blogService.getRelatedPosts(slug, 'blog', query.limit);
+
+    res.setHeader('Cache-Control', PUBLIC_CACHE_HEADER);
+    res.status(200).json({
+      success: true,
+      data: { posts },
+    });
+  },
+
+  /**
+   * GET /api/v1/press/:slug/related
+   * Get related press articles.
+   */
+  async getRelatedPressPosts(req: Request, res: Response): Promise<void> {
+    const { slug } = (req as Request & { validatedParams: BlogSlugParam })
+      .validatedParams;
+    const query = (req as Request & { validatedQuery: RelatedPostsQuery })
+      .validatedQuery;
+    logger.debug({ slug, query }, 'Get related press posts request');
+
+    const posts = await blogService.getRelatedPosts(slug, 'press', query.limit);
+
+    res.setHeader('Cache-Control', PUBLIC_CACHE_HEADER);
+    res.status(200).json({
+      success: true,
+      data: { posts },
     });
   },
 

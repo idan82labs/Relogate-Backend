@@ -150,6 +150,139 @@ export const blogService = {
   },
 
   /**
+   * Get total pages count for pagination.
+   * Used by frontend for static generation.
+   */
+  async getTotalPages(
+    contentType: BlogContentType,
+    limit: number = 6
+  ): Promise<{ totalPages: number; total: number }> {
+    logger.debug({ contentType, limit }, 'Getting total pages');
+
+    const [countResult] = await db
+      .select({ count: count() })
+      .from(blogPosts)
+      .where(
+        and(
+          eq(blogPosts.contentType, contentType),
+          eq(blogPosts.status, 'published')
+        )
+      );
+
+    const total = countResult?.count ?? 0;
+    const totalPages = Math.ceil(total / limit);
+
+    logger.debug({ contentType, total, totalPages }, 'Total pages calculated');
+
+    return { totalPages, total };
+  },
+
+  /**
+   * Get all slugs for static generation.
+   */
+  async getAllSlugs(
+    contentType?: BlogContentType
+  ): Promise<{ slugs: string[] }> {
+    logger.debug({ contentType }, 'Getting all slugs');
+
+    const conditions = [eq(blogPosts.status, 'published')];
+    if (contentType) {
+      conditions.push(eq(blogPosts.contentType, contentType));
+    }
+
+    const rows = await db
+      .select({ slug: blogPosts.slug })
+      .from(blogPosts)
+      .where(and(...conditions));
+
+    const slugs = rows.map((row) => row.slug);
+
+    logger.debug({ count: slugs.length }, 'Slugs retrieved');
+
+    return { slugs };
+  },
+
+  /**
+   * Get related posts based on category.
+   */
+  async getRelatedPosts(
+    slug: string,
+    contentType: BlogContentType,
+    limit: number = 3
+  ): Promise<BlogPostSummary[]> {
+    logger.debug({ slug, contentType, limit }, 'Getting related posts');
+
+    // First get the current post to find its category
+    const [currentPost] = await db
+      .select({ category: blogPosts.category })
+      .from(blogPosts)
+      .where(
+        and(
+          eq(blogPosts.slug, slug),
+          eq(blogPosts.contentType, contentType),
+          eq(blogPosts.status, 'published')
+        )
+      )
+      .limit(1);
+
+    // Build conditions for related posts
+    const conditions = [
+      eq(blogPosts.contentType, contentType),
+      eq(blogPosts.status, 'published'),
+      sql`${blogPosts.slug} != ${slug}`, // Exclude current post
+    ];
+
+    // If current post has a category, prefer posts with same category
+    if (currentPost?.category) {
+      conditions.push(eq(blogPosts.category, currentPost.category));
+    }
+
+    let rows = await db
+      .select()
+      .from(blogPosts)
+      .where(and(...conditions))
+      .orderBy(desc(blogPosts.publishedAt))
+      .limit(limit);
+
+    // If not enough posts in same category, get more from any category
+    if (rows.length < limit && currentPost?.category) {
+      const existingSlugs = rows.map((r) => r.slug);
+      const additionalRows = await db
+        .select()
+        .from(blogPosts)
+        .where(
+          and(
+            eq(blogPosts.contentType, contentType),
+            eq(blogPosts.status, 'published'),
+            sql`${blogPosts.slug} != ${slug}`,
+            sql`${blogPosts.slug} NOT IN (${existingSlugs.length > 0 ? existingSlugs.map(s => `'${s}'`).join(',') : "''"})`
+          )
+        )
+        .orderBy(desc(blogPosts.publishedAt))
+        .limit(limit - rows.length);
+
+      rows = [...rows, ...additionalRows];
+    }
+
+    const posts: BlogPostSummary[] = rows.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      contentType: row.contentType as BlogContentType,
+      title: row.title,
+      excerpt: row.excerpt,
+      featuredImageUrl: row.featuredImageUrl,
+      category: row.category as BlogCategory | null,
+      author: row.author,
+      publishedAt:
+        row.publishedAt?.toISOString() ?? row.createdAt.toISOString(),
+    }));
+
+    logger.debug({ slug, count: posts.length }, 'Related posts retrieved');
+
+    return posts;
+  },
+
+  /**
    * Increment view count for a blog post.
    */
   async incrementViewCount(id: string): Promise<void> {

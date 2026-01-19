@@ -106,3 +106,32 @@ export const adminListBlogQuerySchema = listBlogQuerySchema.extend({
 });
 
 export type AdminListBlogQuery = z.infer<typeof adminListBlogQuerySchema>;
+
+/**
+ * Total pages query schema.
+ */
+export const totalPagesQuerySchema = z.object({
+  contentType: z.enum(['blog', 'press']).default('blog'),
+  limit: z.coerce.number().int().min(1).max(50).default(6),
+});
+
+export type TotalPagesQuery = z.infer<typeof totalPagesQuerySchema>;
+
+/**
+ * All slugs query schema.
+ */
+export const allSlugsQuerySchema = z.object({
+  contentType: z.enum(['blog', 'press']).optional(),
+});
+
+export type AllSlugsQuery = z.infer<typeof allSlugsQuerySchema>;
+
+/**
+ * Related posts query schema.
+ */
+export const relatedPostsQuerySchema = z.object({
+  locale: z.enum(['he', 'en']).default('he'),
+  limit: z.coerce.number().int().min(1).max(10).default(3),
+});
+
+export type RelatedPostsQuery = z.infer<typeof relatedPostsQuerySchema>;

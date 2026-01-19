@@ -14,12 +14,18 @@ import {
   createBlogPostSchema,
   updateBlogPostSchema,
   adminListBlogQuerySchema,
+  totalPagesQuerySchema,
+  allSlugsQuerySchema,
+  relatedPostsQuerySchema,
 } from './blog.schema.js';
 
 /**
  * Public blog routes (no auth required).
  * GET /api/v1/blog - List blog posts
+ * GET /api/v1/blog/pages - Get total pages count
+ * GET /api/v1/blog/slugs - Get all slugs
  * GET /api/v1/blog/:slug - Get blog post by slug
+ * GET /api/v1/blog/:slug/related - Get related posts
  */
 const blogPublicRouter = Router();
 
@@ -32,6 +38,40 @@ blogPublicRouter.get(
   '/',
   validateQuery(listBlogQuerySchema),
   blogController.listBlogPosts
+);
+
+/**
+ * @route   GET /api/v1/blog/pages
+ * @desc    Get total pages count for pagination
+ * @access  Public
+ */
+blogPublicRouter.get(
+  '/pages',
+  validateQuery(totalPagesQuerySchema),
+  blogController.getTotalPages
+);
+
+/**
+ * @route   GET /api/v1/blog/slugs
+ * @desc    Get all slugs for static generation
+ * @access  Public
+ */
+blogPublicRouter.get(
+  '/slugs',
+  validateQuery(allSlugsQuerySchema),
+  blogController.getAllSlugs
+);
+
+/**
+ * @route   GET /api/v1/blog/:slug/related
+ * @desc    Get related posts for an article
+ * @access  Public
+ */
+blogPublicRouter.get(
+  '/:slug/related',
+  validateParams(blogSlugParamSchema),
+  validateQuery(relatedPostsQuerySchema),
+  blogController.getRelatedPosts
 );
 
 /**
@@ -49,6 +89,7 @@ blogPublicRouter.get(
  * Public press routes (no auth required).
  * GET /api/v1/press - List press articles
  * GET /api/v1/press/:slug - Get press article by slug
+ * GET /api/v1/press/:slug/related - Get related press articles
  */
 const pressPublicRouter = Router();
 
@@ -61,6 +102,18 @@ pressPublicRouter.get(
   '/',
   validateQuery(listBlogQuerySchema),
   blogController.listPressPosts
+);
+
+/**
+ * @route   GET /api/v1/press/:slug/related
+ * @desc    Get related press articles
+ * @access  Public
+ */
+pressPublicRouter.get(
+  '/:slug/related',
+  validateParams(blogSlugParamSchema),
+  validateQuery(relatedPostsQuerySchema),
+  blogController.getRelatedPressPosts
 );
 
 /**
