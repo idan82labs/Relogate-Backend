@@ -47,6 +47,13 @@ adminRouter.get(
 adminRouter.get('/pending', reportsController.getPendingQuestionnaires);
 
 /**
+ * @route   GET /api/v1/admin/reports/questionnaire/:questionnaireId
+ * @desc    Get questionnaire responses by ID (for admin to view while preparing report)
+ * @access  Admin only
+ */
+adminRouter.get('/questionnaire/:questionnaireId', reportsController.getQuestionnaireResponses);
+
+/**
  * @route   GET /api/v1/admin/reports/:reportId
  * @desc    Get a report by ID
  * @access  Admin only

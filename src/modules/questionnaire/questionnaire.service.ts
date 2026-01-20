@@ -39,10 +39,29 @@ const logger = createModuleLogger('questionnaire-service');
 export const questionnaireService = {
   /**
    * Get or create a questionnaire for a user.
-   * Returns existing in-progress questionnaire if one exists.
+   * Returns existing completed or in-progress questionnaire if one exists.
+   * Only creates a new questionnaire if user has no active questionnaire.
    */
   async getOrCreate(userId: string): Promise<PublicQuestionnaire> {
     logger.debug({ userId }, 'Getting or creating questionnaire');
+
+    // First, check for existing completed questionnaire (user should not be able to retake)
+    const completed = await db
+      .select()
+      .from(questionnaireResponses)
+      .where(
+        and(
+          eq(questionnaireResponses.userId, userId),
+          eq(questionnaireResponses.status, 'completed')
+        )
+      )
+      .orderBy(desc(questionnaireResponses.completedAt))
+      .limit(1);
+
+    if (completed.length > 0 && completed[0]) {
+      logger.debug({ userId, questionnaireId: completed[0].id }, 'Found existing completed questionnaire');
+      return toPublicQuestionnaire(completed[0]);
+    }
 
     // Check for existing in-progress questionnaire
     const existing = await db
@@ -57,11 +76,11 @@ export const questionnaireService = {
       .limit(1);
 
     if (existing.length > 0 && existing[0]) {
-      logger.debug({ userId, questionnaireId: existing[0].id }, 'Found existing questionnaire');
+      logger.debug({ userId, questionnaireId: existing[0].id }, 'Found existing in-progress questionnaire');
       return toPublicQuestionnaire(existing[0]);
     }
 
-    // Create new questionnaire
+    // Create new questionnaire only if user has no active questionnaires
     const insertResult = await db
       .insert(questionnaireResponses)
       .values({

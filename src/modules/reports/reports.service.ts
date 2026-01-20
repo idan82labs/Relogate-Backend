@@ -243,7 +243,9 @@ export const reportsService = {
 
     const questionnaires = rows.map(row => ({
       id: row.questionnaire.id,
-      user: toUserInfo(row.user!),
+      user: row.user?.id
+        ? toUserInfo(row.user)
+        : { id: row.questionnaire.userId, firstName: null, lastName: null },
       countries: row.questionnaire.responses?.preferredCountries ?? [],
       submittedAt: row.questionnaire.completedAt?.toISOString() ?? row.questionnaire.createdAt.toISOString(),
       reportExists: false,
@@ -259,6 +261,55 @@ export const reportsService = {
         total,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  },
+
+  /**
+   * Get questionnaire responses by questionnaire ID (for admin view).
+   */
+  async getQuestionnaireResponses(questionnaireId: string): Promise<{
+    id: string;
+    userId: string;
+    userName: string | null;
+    responses: Record<string, unknown>;
+    status: string;
+    completedAt: string | null;
+    createdAt: string;
+  }> {
+    logger.debug({ questionnaireId }, 'Getting questionnaire responses');
+
+    const [row] = await db
+      .select({
+        questionnaire: questionnaireResponses,
+        user: {
+          id: userProfiles.id,
+          firstName: userProfiles.firstName,
+          lastName: userProfiles.lastName,
+        },
+      })
+      .from(questionnaireResponses)
+      .leftJoin(userProfiles, eq(questionnaireResponses.userId, userProfiles.id))
+      .where(eq(questionnaireResponses.id, questionnaireId))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundError('Questionnaire');
+    }
+
+    const userName = row.user?.firstName && row.user?.lastName
+      ? `${row.user.firstName} ${row.user.lastName}`
+      : row.user?.firstName || null;
+
+    logger.info({ questionnaireId }, 'Questionnaire responses retrieved');
+
+    return {
+      id: row.questionnaire.id,
+      userId: row.questionnaire.userId,
+      userName,
+      responses: row.questionnaire.responses as Record<string, unknown>,
+      status: row.questionnaire.status,
+      completedAt: row.questionnaire.completedAt?.toISOString() ?? null,
+      createdAt: row.questionnaire.createdAt.toISOString(),
     };
   },
 

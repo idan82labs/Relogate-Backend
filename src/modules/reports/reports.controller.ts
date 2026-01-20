@@ -39,6 +39,22 @@ export const reportsController = {
   },
 
   /**
+   * GET /api/v1/admin/reports/questionnaire/:questionnaireId
+   * Get questionnaire responses by questionnaire ID (for admin to view while preparing report).
+   */
+  async getQuestionnaireResponses(req: Request, res: Response): Promise<void> {
+    const questionnaireId = req.params.questionnaireId as string;
+    logger.debug({ questionnaireId }, 'Get questionnaire responses request');
+
+    const questionnaire = await reportsService.getQuestionnaireResponses(questionnaireId);
+
+    res.status(200).json({
+      success: true,
+      data: { questionnaire },
+    });
+  },
+
+  /**
    * GET /api/v1/admin/reports/pending
    * Get pending questionnaires (no report created yet).
    */
