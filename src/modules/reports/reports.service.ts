@@ -414,12 +414,73 @@ export const reportsService = {
       .limit(1);
 
     // Build profile summary from questionnaire data or use provided
-    const responses = questionnaire.responses;
+    // Note: V2 questionnaire stores fields at top level, V1 used nested paths
+    const responses = questionnaire.responses as Record<string, unknown> | undefined;
+
+    // Calculate age from birthDate if available
+    // V2: top-level birthDate, V1: personalDetails.birthDate
+    let calculatedAge: string | undefined;
+    const birthDateValue = (responses?.birthDate as string) ??
+      (responses?.personalDetails as Record<string, unknown>)?.birthDate as string | undefined;
+    if (birthDateValue) {
+      const birthDate = new Date(birthDateValue);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      calculatedAge = String(age);
+    }
+
+    // Format relocation reasons as comma-separated string
+    let formattedRelocationGoals: string | undefined;
+    if (responses?.relocationReasons && Array.isArray(responses.relocationReasons)) {
+      formattedRelocationGoals = (responses.relocationReasons as string[]).join(', ');
+    } else if (responses?.relocationReason) {
+      // Fallback to V1 legacy field
+      formattedRelocationGoals = responses.relocationReason as string;
+    }
+
+    // Get family status - V2: top-level familyStatus, also check personalDetails
+    const personalDetails = responses?.personalDetails as Record<string, unknown> | undefined;
+    const familyStatus = (responses?.familyStatus as string) ??
+      personalDetails?.familyStatus as string | undefined;
+
+    // Get citizenship - V2: citizenships array (top level), V1: personalDetails.citizenship
+    let citizenshipValue: string | undefined;
+    if (responses?.citizenships && Array.isArray(responses.citizenships) && (responses.citizenships as string[]).length > 0) {
+      citizenshipValue = (responses.citizenships as string[]).join(', ');
+    } else if (personalDetails?.citizenship) {
+      citizenshipValue = personalDetails.citizenship as string;
+    }
+
+    // Get profession - V2: occupation (top level), V1: employment.fieldOfWork
+    const employment = responses?.employment as Record<string, unknown> | undefined;
+    const profession = (responses?.occupation as string) ?? employment?.fieldOfWork as string | undefined;
+
+    // Get net income - V2: householdIncome (top level), V1: employment.monthlyIncome
+    const netIncome = (responses?.householdIncome as string) ?? employment?.monthlyIncome as string | undefined;
+
+    // Get passive income - V2: passiveIncomeAmount (top level), V1: employment.passiveIncomeAmount
+    let passiveIncome: string | undefined;
+    const passiveIncomeAmount = (responses?.passiveIncomeAmount as string) ?? employment?.passiveIncomeAmount as string | undefined;
+    const hasPassiveIncome = (responses?.hasPassiveIncome as boolean) ?? employment?.hasPassiveIncome as boolean | undefined;
+    if (passiveIncomeAmount) {
+      passiveIncome = passiveIncomeAmount;
+    } else if (hasPassiveIncome) {
+      passiveIncome = 'יש הכנסה פסיבית';
+    }
+
     const defaultProfileSummary: ReportProfileSummary = {
       userName: userProfile ? `${userProfile.firstName ?? ''} ${userProfile.lastName ?? ''}`.trim() : '',
-      citizenship: responses?.personalDetails?.citizenship ?? undefined,
-      familyStatus: responses?.familyStatus ?? undefined,
-      relocationGoals: responses?.relocationReason ?? undefined,
+      citizenship: citizenshipValue,
+      age: calculatedAge,
+      profession: profession,
+      familyStatus: familyStatus,
+      netIncome: netIncome,
+      passiveIncome: passiveIncome,
+      relocationGoals: formattedRelocationGoals,
     };
 
     // Create report
@@ -817,6 +878,21 @@ export const reportsService = {
   async getUserReportStatus(userId: string): Promise<UserReportStatus> {
     logger.debug({ userId }, 'Getting user report status');
 
+    // Check if user has a completed questionnaire
+    const [questionnaire] = await db
+      .select()
+      .from(questionnaireResponses)
+      .where(
+        and(
+          eq(questionnaireResponses.userId, userId),
+          eq(questionnaireResponses.status, 'completed')
+        )
+      )
+      .orderBy(desc(questionnaireResponses.completedAt))
+      .limit(1);
+
+    const hasCompletedQuestionnaire = !!questionnaire;
+
     // Get report for user
     const [report] = await db
       .select()
@@ -830,6 +906,7 @@ export const reportsService = {
         hasReport: false,
         hasPublishedReport: false,
         publishedDestinationCount: 0,
+        hasCompletedQuestionnaire,
       };
     }
 
@@ -846,13 +923,14 @@ export const reportsService = {
 
     const publishedCount = countResult?.count ?? 0;
 
-    logger.info({ userId, hasReport: true, publishedCount }, 'User report status retrieved');
+    logger.info({ userId, hasReport: true, publishedCount, hasCompletedQuestionnaire }, 'User report status retrieved');
 
     return {
       hasReport: true,
       hasPublishedReport: report.status === 'published',
       publishedDestinationCount: publishedCount,
       reportId: report.id,
+      hasCompletedQuestionnaire,
     };
   },
 
