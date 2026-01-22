@@ -2,6 +2,7 @@ import {
   pgTable,
   uuid,
   varchar,
+  text,
   timestamp,
   boolean,
   pgEnum,
@@ -57,6 +58,9 @@ export const userProfiles = pgTable('user_profiles', {
   // Onboarding
   onboardingStatus: onboardingStatusEnum('onboarding_status').default('pending').notNull(),
   onboardingCompletedAt: timestamp('onboarding_completed_at', { mode: 'date' }),
+
+  // Stripe integration
+  stripeCustomerId: text('stripe_customer_id'),
 
   // Timestamps
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { apiRouter } from './routes/index.js';
+import { paymentsWebhookRouter } from './modules/payments/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { sessionLoggerMiddleware } from './middleware/session-logger.js';
 
@@ -54,6 +55,14 @@ export function createApp(): Application {
   //     next();
   //   });
   // }
+
+  // ===========================================
+  // Stripe Webhook (before JSON parser)
+  // ===========================================
+
+  // Stripe webhook needs raw body for signature verification
+  // Must be registered BEFORE the JSON body parser
+  app.use('/api/v1/payments/webhook', paymentsWebhookRouter);
 
   // ===========================================
   // Request Parsing

@@ -56,6 +56,20 @@ const envSchema = z.object({
     .string()
     .default('http://localhost:3000'),
 
+  // Stripe
+  STRIPE_SECRET_KEY: z
+    .string()
+    .optional()
+    .default(''),
+  STRIPE_PUBLISHABLE_KEY: z
+    .string()
+    .optional()
+    .default(''),
+  STRIPE_WEBHOOK_SECRET: z
+    .string()
+    .optional()
+    .default(''),
+
   // TODO: Production security configuration
   // Uncomment and configure for production
 

@@ -7,6 +7,7 @@ import { reportsAdminRouter, reportsPublicRouter } from '../modules/reports/inde
 import { notificationsUserRouter, notificationsAdminRouter } from '../modules/notifications/index.js';
 import { uploadRouter } from '../modules/upload/index.js';
 import { blogPublicRouter, pressPublicRouter, blogAdminRouter } from '../modules/blog/index.js';
+import { paymentsRouter } from '../modules/payments/index.js';
 
 const router = Router();
 
@@ -63,5 +64,9 @@ router.use('/press', pressPublicRouter);
 
 // Admin blog routes: /api/v1/admin/blog/*
 router.use('/admin/blog', blogAdminRouter);
+
+// Payments routes: /api/v1/payments/*
+// Note: Webhook route is registered separately in app.ts before JSON parser
+router.use('/payments', paymentsRouter);
 
 export const apiRouter = router;

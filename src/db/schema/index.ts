@@ -16,3 +16,4 @@ export * from './countries.js';
 export * from './reports.js';
 export * from './notifications.js';
 export * from './blog.js';
+export * from './payments.js';

@@ -74,6 +74,28 @@ router.delete(
   adminController.deleteUser
 );
 
+/**
+ * @route   POST /api/v1/admin/users/:userId/restore
+ * @desc    Restore a deactivated user
+ * @access  Admin only
+ */
+router.post(
+  '/users/:userId/restore',
+  validateParams(userIdParamSchema),
+  adminController.restoreUser
+);
+
+/**
+ * @route   GET /api/v1/admin/users/:userId/payments
+ * @desc    Get user's payment status
+ * @access  Admin only
+ */
+router.get(
+  '/users/:userId/payments',
+  validateParams(userIdParamSchema),
+  adminController.getUserPaymentStatus
+);
+
 // ================== Questionnaire Admin Endpoints ==================
 
 /**

@@ -1,6 +1,6 @@
 import { eq, desc, asc, or, ilike, count, and } from 'drizzle-orm';
 import { db } from '../../db/index.js';
-import { userProfiles, questionnaireResponses } from '../../db/schema/index.js';
+import { userProfiles, questionnaireResponses, payments, type Payment } from '../../db/schema/index.js';
 import { supabaseAdmin } from '../../lib/supabase.js';
 import { createModuleLogger } from '../../config/logger.js';
 import {
@@ -389,5 +389,72 @@ export const adminService = {
 
       logger.info({ userId }, 'User soft deleted (deactivated)');
     }
+  },
+
+  /**
+   * Restore a deactivated user.
+   *
+   * @param userId - The user ID to restore
+   * @param adminUserId - The current admin's user ID
+   * @throws NotFoundError if user not found
+   * @throws BadRequestError if user is already active
+   */
+  async restoreUser(userId: string, adminUserId: string): Promise<void> {
+    logger.debug({ userId, adminUserId }, 'Restoring user');
+
+    // Check if user exists
+    const [user] = await db
+      .select()
+      .from(userProfiles)
+      .where(eq(userProfiles.id, userId))
+      .limit(1);
+
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    if (user.isActive) {
+      throw new BadRequestError('User is already active');
+    }
+
+    // Restore user
+    await db
+      .update(userProfiles)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(userProfiles.id, userId));
+
+    logger.info({ userId, adminUserId }, 'User restored');
+  },
+
+  /**
+   * Get user payment status.
+   *
+   * @param userId - The user ID
+   * @returns Payment status summary
+   */
+  async getUserPaymentStatus(userId: string): Promise<{
+    hasPaidReport: boolean;
+    hasPaidConsultation: boolean;
+    totalPayments: number;
+    lastPayment: Payment | null;
+  }> {
+    // Get all completed payments for user
+    const userPayments = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.userId, userId))
+      .orderBy(desc(payments.createdAt));
+
+    const completedPayments = userPayments.filter(p => p.status === 'completed');
+
+    const hasPaidReport = completedPayments.some(p => p.productType === 'relomatch_report');
+    const hasPaidConsultation = completedPayments.some(p => p.productType === 'consultation');
+
+    return {
+      hasPaidReport,
+      hasPaidConsultation,
+      totalPayments: completedPayments.length,
+      lastPayment: userPayments[0] || null,
+    };
   },
 };

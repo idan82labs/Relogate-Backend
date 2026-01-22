@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { adminService } from './admin.service.js';
 import { createModuleLogger } from '../../config/logger.js';
+import { UnauthorizedError } from '../../lib/errors.js';
 import type { ListUsersQuery, CreateUserInput, UserIdParam, BatchNotificationInput } from './admin.schema.js';
 import { questionnaireService } from '../questionnaire/questionnaire.service.js';
 import { notificationsService } from '../notifications/notifications.service.js';
@@ -237,6 +238,52 @@ export const adminController = {
         totalCount: userIds.length,
         errors: errors.length > 0 ? errors : undefined,
       },
+    });
+  },
+
+  /**
+   * POST /api/v1/admin/users/:userId/restore
+   * Restore a deactivated user.
+   */
+  async restoreUser(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { userId } = (req as Request & { validatedParams: UserIdParam }).validatedParams;
+    const adminUserId = req.user?.id;
+
+    if (!adminUserId) {
+      throw new UnauthorizedError('Admin user ID not found');
+    }
+
+    logger.debug({ userId, adminUserId }, 'Restore user request');
+
+    await adminService.restoreUser(userId, adminUserId);
+
+    logger.info({ userId }, 'User restored by admin');
+
+    res.status(200).json({
+      success: true,
+      message: 'User restored successfully',
+    });
+  },
+
+  /**
+   * GET /api/v1/admin/users/:userId/payments
+   * Get user's payment status.
+   */
+  async getUserPaymentStatus(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const { userId } = (req as Request & { validatedParams: UserIdParam }).validatedParams;
+    logger.debug({ userId }, 'Get user payment status request');
+
+    const paymentStatus = await adminService.getUserPaymentStatus(userId);
+
+    res.status(200).json({
+      success: true,
+      data: paymentStatus,
     });
   },
 };
