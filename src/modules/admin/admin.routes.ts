@@ -96,6 +96,15 @@ router.get(
   adminController.getUserPaymentStatus
 );
 
+// ================== Payments Admin Endpoints ==================
+
+/**
+ * @route   GET /api/v1/admin/payments
+ * @desc    List all payments with pagination and filtering
+ * @access  Admin only
+ */
+router.get('/payments', adminController.listAllPayments);
+
 // ================== Questionnaire Admin Endpoints ==================
 
 /**

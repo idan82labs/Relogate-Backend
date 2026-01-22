@@ -457,4 +457,124 @@ export const adminService = {
       lastPayment: userPayments[0] || null,
     };
   },
+
+  /**
+   * List all payments with pagination and filtering (admin).
+   *
+   * @param query - Query parameters
+   * @returns Paginated list of payments with user info
+   */
+  async listAllPayments(query: {
+    page: number;
+    limit: number;
+    status?: string;
+    productType?: string;
+    search?: string;
+    sortBy?: 'createdAt' | 'amount' | 'paidAt';
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<{
+    payments: Array<Payment & { user: { firstName: string; lastName: string; email: string } | null }>;
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const { page, limit, status, productType, search, sortBy = 'createdAt', sortOrder = 'desc' } = query;
+    const offset = (page - 1) * limit;
+
+    logger.debug({ query }, 'Listing all payments');
+
+    // Build where conditions
+    const conditions = [];
+
+    if (status) {
+      conditions.push(eq(payments.status, status as Payment['status']));
+    }
+
+    if (productType) {
+      conditions.push(eq(payments.productType, productType as Payment['productType']));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Build order by
+    const sortColumn = {
+      createdAt: payments.createdAt,
+      amount: payments.amount,
+      paidAt: payments.paidAt,
+    }[sortBy] || payments.createdAt;
+
+    const orderBy = sortOrder === 'asc' ? asc(sortColumn) : desc(sortColumn);
+
+    // Get total count
+    const [countResult] = await db
+      .select({ count: count() })
+      .from(payments)
+      .where(whereClause);
+
+    const total = countResult?.count ?? 0;
+
+    // Get paginated payments with user profiles
+    const paymentResults = await db
+      .select({
+        payment: payments,
+        user: {
+          firstName: userProfiles.firstName,
+          lastName: userProfiles.lastName,
+        },
+      })
+      .from(payments)
+      .leftJoin(userProfiles, eq(payments.userId, userProfiles.id))
+      .where(whereClause)
+      .orderBy(orderBy)
+      .limit(limit)
+      .offset(offset);
+
+    // Map results and fetch emails
+    const paymentsWithUsers = await Promise.all(
+      paymentResults.map(async (result) => {
+        let email = '';
+        if (result.payment.userId) {
+          try {
+            const { data } = await supabaseAdmin.auth.admin.getUserById(result.payment.userId);
+            email = data?.user?.email ?? '';
+          } catch {
+            // Ignore email fetch error
+          }
+        }
+
+        // Apply search filter on user name/email if provided
+        if (search) {
+          const searchLower = search.toLowerCase();
+          const matchesName = result.user?.firstName?.toLowerCase().includes(searchLower) ||
+                              result.user?.lastName?.toLowerCase().includes(searchLower);
+          const matchesEmail = email.toLowerCase().includes(searchLower);
+          if (!matchesName && !matchesEmail) {
+            return null;
+          }
+        }
+
+        return {
+          ...result.payment,
+          user: result.user ? {
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            email,
+          } : null,
+        };
+      })
+    );
+
+    // Filter out nulls from search
+    const filteredPayments = paymentsWithUsers.filter(Boolean) as Array<Payment & { user: { firstName: string; lastName: string; email: string } | null }>;
+
+    logger.info({ page, limit, total, count: filteredPayments.length }, 'Payments listed');
+
+    return {
+      payments: filteredPayments,
+      pagination: {
+        page,
+        limit,
+        total: search ? filteredPayments.length : total, // Adjust total if search was applied
+        totalPages: Math.ceil((search ? filteredPayments.length : total) / limit),
+      },
+    };
+  },
 };

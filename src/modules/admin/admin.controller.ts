@@ -286,4 +286,32 @@ export const adminController = {
       data: paymentStatus,
     });
   },
+
+  /**
+   * GET /api/v1/admin/payments
+   * List all payments with pagination and filtering.
+   */
+  async listAllPayments(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const query = {
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 20,
+      status: req.query.status as string | undefined,
+      productType: req.query.productType as string | undefined,
+      search: req.query.search as string | undefined,
+      sortBy: (req.query.sortBy as 'createdAt' | 'amount' | 'paidAt') || 'createdAt',
+      sortOrder: (req.query.sortOrder as 'asc' | 'desc') || 'desc',
+    };
+
+    logger.debug({ query }, 'List all payments request');
+
+    const result = await adminService.listAllPayments(query);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  },
 };
