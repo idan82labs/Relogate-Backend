@@ -4,6 +4,20 @@
 
 Two database connection methods:
 
+## Current Tables
+
+| Table | Description | Schema File |
+|-------|-------------|-------------|
+| `user_profiles` | User profile linked to Supabase Auth | `users.ts` |
+| `questionnaire_responses` | Flexible JSONB questionnaire storage | `questionnaires.ts` |
+| `questionnaire_results` | Computed recommendations | `questionnaires.ts` |
+| `countries` | Static country catalog | `countries.ts` |
+| `questionnaire_reports` | Report headers | `reports.ts` |
+| `destination_responses` | Destination recommendations | `reports.ts` |
+| `notifications` | User/admin notifications | `notifications.ts` |
+| `blog_posts` | Blog and press articles | `blog.ts` |
+| `payments` | Stripe payment records | `payments.ts` |
+
 | Tool | Purpose |
 |------|---------|
 | `@supabase/supabase-js` | Authentication only (login, register, JWT) |

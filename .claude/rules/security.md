@@ -39,3 +39,11 @@
 - Injection: Parameterized queries only
 - Broken Auth: Proper session management
 - Sensitive Data: Encrypt at rest and in transit
+
+## Payment Security (Stripe)
+- NEVER log full card numbers or CVV
+- Verify webhook signatures with `STRIPE_WEBHOOK_SECRET`
+- Use Stripe Checkout for PCI compliance
+- Store only Stripe IDs, not payment details
+- Use test keys (`sk_test_`, `pk_test_`) in development
+- Verify payment status server-side before granting access
