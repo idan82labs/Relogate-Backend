@@ -68,6 +68,80 @@ npm run typecheck # Type check without emitting
 npm run test      # Run tests
 ```
 
+## Stripe Testing (Local Development)
+
+To test Stripe payments locally, you need to forward webhook events to your local server using the Stripe CLI.
+
+### 1. Install Stripe CLI
+
+```bash
+# Option A: Run the setup script (auto-installs if missing)
+./scripts/stripe-setup.sh
+
+# Option B: Manual installation (Linux)
+curl -sL https://github.com/stripe/stripe-cli/releases/download/v1.21.0/stripe_1.21.0_linux_x86_64.tar.gz -o stripe.tar.gz
+tar -xzf stripe.tar.gz
+mkdir -p ~/.local/bin
+mv stripe ~/.local/bin/
+export PATH="$HOME/.local/bin:$PATH"
+
+# Option C: macOS
+brew install stripe/stripe-cli/stripe
+```
+
+### 2. Authenticate with Stripe
+
+```bash
+stripe login
+```
+
+This opens a browser to authenticate with your Stripe account.
+
+### 3. Get Test API Keys
+
+1. Go to [Stripe Test API Keys](https://dashboard.stripe.com/test/apikeys)
+2. Copy your test keys and add to `.env`:
+   ```
+   STRIPE_SECRET_KEY=sk_test_xxxxx
+   STRIPE_PUBLISHABLE_KEY=pk_test_xxxxx
+   ```
+
+### 4. Start Webhook Listener
+
+In a separate terminal, run:
+
+```bash
+# Option A: Use the helper script
+./scripts/stripe-webhook.sh
+
+# Option B: Run directly
+stripe listen --forward-to localhost:3001/api/v1/payments/webhook
+```
+
+The CLI will display a webhook signing secret (starts with `whsec_`). Copy it to your `.env`:
+
+```
+STRIPE_WEBHOOK_SECRET=whsec_xxxxx
+```
+
+### 5. Test the Integration
+
+With both the backend server (`npm run dev`) and webhook listener running:
+
+1. Create a payment through the API
+2. Watch the webhook listener terminal for incoming events
+3. Check server logs for payment processing
+
+### Test Card Numbers
+
+| Card Number | Scenario |
+|-------------|----------|
+| `4242424242424242` | Successful payment |
+| `4000000000000002` | Card declined |
+| `4000000000009995` | Insufficient funds |
+
+Use any future expiry date and any 3-digit CVC.
+
 ## Project Structure
 
 ```
@@ -95,6 +169,9 @@ See `.env.example` for all configuration options.
 | `SUPABASE_ANON_KEY` | Supabase anonymous key | Yes |
 | `SUPABASE_SERVICE_KEY` | Supabase service role key | Yes |
 | `CORS_ORIGIN` | Allowed CORS origin | Yes |
+| `STRIPE_SECRET_KEY` | Stripe secret key (sk_test_...) | For payments |
+| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (pk_test_...) | For payments |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (whsec_...) | For payments |
 
 ## Security Notes
 
